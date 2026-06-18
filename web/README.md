@@ -89,10 +89,13 @@ Two extra screen effects toggle from the **FX** buttons under the canvas:
 
 - **📺 CRT** — scanlines + a corner vignette + subtle flicker. Pure CSS overlay
   on the canvas (`#crt-overlay` in `web/shell.html`), so it costs nothing.
-- **▣ ASCII** — the engine downsamples each frame into a 100×56 luminance grid
-  (`VID_BuildAscii` in `web/vid_sdl.c`, exported via `Web_GetAscii`/
-  `Web_AsciiEnable`); the shell reads that grid every frame and draws green
-  phosphor glyphs over the canvas on a `<canvas>` overlay.
+- **▣ ASCII** — the engine downsamples each frame into a 100×56 grid of the
+  *current* (post-filter) colors (`VID_BuildAscii` in `web/vid_sdl.c`, exported
+  via `Web_GetAscii`/`Web_AsciiEnable`); the shell reads that grid every frame
+  and draws glyphs over the canvas on a `<canvas>` overlay. Because it samples
+  the filtered colors, the ASCII view follows the active theme — green for
+  Matrix, red/orange for Red Hot, magenta/cyan for Synthwave, full color for
+  Normal.
 
 Filters and FX stack — e.g. Red Hot + CRT.
 

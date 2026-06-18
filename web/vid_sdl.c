@@ -66,7 +66,9 @@ static unsigned char	vid_lum[256];
 // ---------------------------------------------------------------------------
 #define	ASCII_COLS	100
 #define	ASCII_ROWS	56
-static unsigned char	g_ascii[ASCII_COLS * ASCII_ROWS];
+// 3 bytes (r,g,b) per cell, averaged from the *filtered* display colors so the
+// ASCII view follows whatever palette theme is active.
+static unsigned char	g_ascii[ASCII_COLS * ASCII_ROWS * 3];
 static int		g_ascii_enabled = 0;
 
 void (*vid_menudrawfn)(void);
@@ -259,7 +261,8 @@ static void	VID_BuildAscii (void)
 		{
 			int x0 = cx * vid.width / ASCII_COLS;
 			int x1 = (cx + 1) * vid.width / ASCII_COLS;
-			unsigned sum = 0, n = 0;
+			unsigned rs = 0, gs = 0, bs = 0, n = 0;
+			unsigned char *out;
 
 			if (x1 <= x0)
 				x1 = x0 + 1;
@@ -269,11 +272,23 @@ static void	VID_BuildAscii (void)
 				pixel_t *row = vid.buffer + y * vid.rowbytes;
 				for (x = x0; x < x1; x++)
 				{
-					sum += vid_lum[row[x]];
+					unsigned v = st2d_active[row[x]];	// filtered color
+					rs += (v >> 16) & 0xFF;
+					gs += (v >> 8) & 0xFF;
+					bs += v & 0xFF;
 					n++;
 				}
 			}
-			g_ascii[cy * ASCII_COLS + cx] = n ? (unsigned char)(sum / n) : 0;
+
+			out = &g_ascii[(cy * ASCII_COLS + cx) * 3];
+			if (n)
+			{
+				out[0] = (unsigned char)(rs / n);
+				out[1] = (unsigned char)(gs / n);
+				out[2] = (unsigned char)(bs / n);
+			}
+			else
+				out[0] = out[1] = out[2] = 0;
 		}
 	}
 }

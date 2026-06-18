@@ -46,6 +46,7 @@
     inset: 0;
     pointer-events: none;
     display: none;
+    z-index: 2;
     background:
       repeating-linear-gradient(
         to bottom,
@@ -69,6 +70,7 @@
     height: 100%;
     background: #000;
     display: none;
+    z-index: 1;
   }
   #stage.ascii #ascii-overlay { display: block; }
   #status {
@@ -305,19 +307,28 @@
       if (!on) return;
       var ptr = Module._Web_GetAscii();
       var heap = Module.HEAPU8;	// re-fetch: heap may grow/detach
+      var stride = cols * 3;
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, overlay.width, overlay.height);
       ctx.textBaseline = 'top';
       ctx.font = cellH + 'px monospace';
       for (var r = 0; r < rows; r++) {
-        var base = ptr + r * cols;
+        var rowbase = ptr + r * stride;
         for (var c = 0; c < cols; c++) {
-          var lum = lut[heap[base + c]];
-          var idx = (lum * (ramp.length - 1) / 255) | 0;
+          var o = rowbase + c * 3;
+          var R = heap[o], G = heap[o + 1], B = heap[o + 2];
+          var lum = (R * 77 + G * 150 + B * 29) >> 8;	// 0..255
+          var bright = lut[lum];
+          var idx = (bright * (ramp.length - 1) / 255) | 0;
           var ch = ramp[idx];
           if (ch === ' ') continue;
-          var g = (lum * 0.35) | 0;
-          ctx.fillStyle = 'rgb(' + g + ',' + lum + ',' + g + ')';
+          // Keep the theme hue but boost brightness for visibility.
+          var s = bright / (lum || 1);
+          var rr = R * s, gg = G * s, bb = B * s;
+          if (rr > 255) rr = 255;
+          if (gg > 255) gg = 255;
+          if (bb > 255) bb = 255;
+          ctx.fillStyle = 'rgb(' + (rr | 0) + ',' + (gg | 0) + ',' + (bb | 0) + ')';
           ctx.fillText(ch, c * cellW, r * cellH);
         }
       }
