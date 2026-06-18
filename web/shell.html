@@ -28,6 +28,9 @@
     margin: 8px 0 4px;
   }
   #hint { font-size: 12px; color: #888; margin-bottom: 12px; }
+  /* The stage wraps the canvas so post-process overlays can sit on top of it
+     at the exact same size. */
+  #stage { position: relative; display: inline-block; line-height: 0; }
   canvas.emscripten {
     border: 1px solid #333;
     image-rendering: pixelated;
@@ -37,6 +40,39 @@
     height: 400px;
     max-width: 95vw;
   }
+  /* CRT scanline + vignette overlay (pure CSS, toggled on #stage). */
+  #crt-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+    z-index: 2;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.0) 0px,
+        rgba(0,0,0,0.0) 1px,
+        rgba(0,0,0,0.35) 2px,
+        rgba(0,0,0,0.35) 3px),
+      radial-gradient(ellipse at center,
+        rgba(0,0,0,0) 55%,
+        rgba(0,0,0,0.55) 100%);
+    mix-blend-mode: multiply;
+    animation: crt-flicker 6s infinite steps(60);
+  }
+  #stage.crt #crt-overlay { display: block; }
+  @keyframes crt-flicker { 0%,97% { opacity: 1; } 98% { opacity: 0.92; } 100% { opacity: 1; } }
+  /* ASCII overlay canvas, drawn from the engine's downsampled luminance grid. */
+  #ascii-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: none;
+    z-index: 1;
+  }
+  #stage.ascii #ascii-overlay { display: block; }
   #status {
     margin-top: 10px;
     font-size: 12px;
@@ -55,6 +91,9 @@
   }
   button.qbtn:hover { background: #2a2a2a; border-color: #b03020; }
   button.qbtn:disabled { opacity: 0.4; cursor: default; }
+  button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
+  #controls button.qbtn { margin: 2px; }
+  #filters { display: inline-block; margin-left: 8px; }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
      preserves its intrinsic ratio). */
@@ -83,12 +122,26 @@
 <body>
 <div id="wrap">
   <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click or the button below for fullscreen</div>
-  <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII)</div>
+  <div id="stage">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <div id="crt-overlay"></div>
+    <canvas id="ascii-overlay"></canvas>
+  </div>
   <div id="status">Loading&hellip;</div>
   <progress hidden id="progress" max="100" value="0"></progress>
   <div id="controls">
     <button class="qbtn" disabled id="fullscreen-btn" type="button">Fullscreen</button>
+    <span id="filters">
+      <button class="qbtn filter-btn" disabled type="button" data-filter="0">Normal</button>
+      <button class="qbtn filter-btn" disabled type="button" data-filter="1">&#128293; Red Hot</button>
+      <button class="qbtn filter-btn" disabled type="button" data-filter="2">&#127750; Synthwave</button>
+      <button class="qbtn filter-btn" disabled type="button" data-filter="3">&#129001; Matrix</button>
+    </span>
+    <span id="fx">
+      <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
+      <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
+    </span>
   </div>
   <textarea id="output" readonly></textarea>
 </div>
@@ -185,6 +238,126 @@
 
     // Double-clicking the canvas also goes fullscreen.
     canvasElement.addEventListener('dblclick', goFullscreen);
+  })();
+
+  // ---- Video filters (palette remaps in the engine) ----
+  (function () {
+    var buttons = Array.prototype.slice.call(
+      document.querySelectorAll('.filter-btn'));
+
+    function setFilter(n) {
+      try {
+        Module.ccall('Web_SetFilter', null, ['number'], [n]);
+      } catch (e) {
+        console.warn('Web_SetFilter unavailable:', e);
+      }
+      buttons.forEach(function (b) {
+        b.classList.toggle('active', +b.dataset.filter === n);
+      });
+      canvasElement.focus();
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        setFilter(+b.dataset.filter);
+      });
+    });
+
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      buttons.forEach(function (b) { b.disabled = false; });
+      buttons[0].classList.add('active');
+    };
+  })();
+
+  // ---- CRT overlay (pure CSS) ----
+  (function () {
+    var stage = document.getElementById('stage');
+    var btn = document.getElementById('crt-btn');
+    btn.addEventListener('click', function () {
+      var on = stage.classList.toggle('crt');
+      btn.classList.toggle('active', on);
+      canvasElement.focus();
+    });
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      btn.disabled = false;
+    };
+  })();
+
+  // ---- ASCII overlay (engine downsamples; JS draws glyphs) ----
+  (function () {
+    var stage = document.getElementById('stage');
+    var btn = document.getElementById('ascii-btn');
+    var overlay = document.getElementById('ascii-overlay');
+    var ctx = overlay.getContext('2d');
+    var ramp = ' .,:;irsXA253hMHGS#9B&@';
+    var cols = 0, rows = 0, cellW = 8, cellH = 9;
+    var on = false, rafId = 0;
+
+    // Brightness curve: lift midtones/shadows so the glyphs read clearly even
+    // in Quake's dim scenes.
+    var lut = new Uint8Array(256);
+    for (var li = 0; li < 256; li++)
+      lut[li] = Math.min(255, Math.round(255 * Math.pow(li / 255, 0.55) + 12));
+
+    function draw() {
+      if (!on) return;
+      var ptr = Module._Web_GetAscii();
+      var heap = Module.HEAPU8;	// re-fetch: heap may grow/detach
+      var stride = cols * 3;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, overlay.width, overlay.height);
+      ctx.textBaseline = 'top';
+      ctx.font = cellH + 'px monospace';
+      for (var r = 0; r < rows; r++) {
+        var rowbase = ptr + r * stride;
+        for (var c = 0; c < cols; c++) {
+          var o = rowbase + c * 3;
+          var R = heap[o], G = heap[o + 1], B = heap[o + 2];
+          var lum = (R * 77 + G * 150 + B * 29) >> 8;	// 0..255
+          var bright = lut[lum];
+          var idx = (bright * (ramp.length - 1) / 255) | 0;
+          var ch = ramp[idx];
+          if (ch === ' ') continue;
+          // Keep the theme hue but boost brightness for visibility.
+          var s = bright / (lum || 1);
+          var rr = R * s, gg = G * s, bb = B * s;
+          if (rr > 255) rr = 255;
+          if (gg > 255) gg = 255;
+          if (bb > 255) bb = 255;
+          ctx.fillStyle = 'rgb(' + (rr | 0) + ',' + (gg | 0) + ',' + (bb | 0) + ')';
+          ctx.fillText(ch, c * cellW, r * cellH);
+        }
+      }
+      rafId = requestAnimationFrame(draw);
+    }
+
+    btn.addEventListener('click', function () {
+      on = !on;
+      btn.classList.toggle('active', on);
+      stage.classList.toggle('ascii', on);
+      Module.ccall('Web_AsciiEnable', null, ['number'], [on ? 1 : 0]);
+      if (on) {
+        cols = Module._Web_AsciiCols();
+        rows = Module._Web_AsciiRows();
+        overlay.width = cols * cellW;
+        overlay.height = rows * cellH;
+        rafId = requestAnimationFrame(draw);
+      } else if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      canvasElement.focus();
+    });
+
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      btn.disabled = false;
+    };
   })();
 </script>
 {{{ SCRIPT }}}

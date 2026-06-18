@@ -66,6 +66,39 @@ python3 -m http.server 8000
 - **Fullscreen**: click the **Fullscreen** button under the canvas, or
   double-click the canvas. Press **ESC** (or F11) to exit.
 
+## Video filters
+
+Because the software renderer is fully palettized, the whole game can be
+recolored in real time by remapping the 256-color table — no GPU shaders
+required. Use the buttons under the canvas, or the console command `vidfilter`
+(cycles), or set the archived cvar `vid_filter` directly:
+
+| `vid_filter` | Look |
+|---|---|
+| `0` | Normal |
+| `1` | 🔥 Red Hot (thermal / predator vision) |
+| `2` | 🌆 Synthwave (neon magenta → cyan) |
+| `3` | 🟩 Matrix (green phosphor) |
+
+The filters are implemented in `web/vid_sdl.c` (`VID_BuildFilter`). The web UI
+calls the exported `Web_SetFilter()` via `Module.ccall`.
+
+## Post-process FX
+
+Two extra screen effects toggle from the **FX** buttons under the canvas:
+
+- **📺 CRT** — scanlines + a corner vignette + subtle flicker. Pure CSS overlay
+  on the canvas (`#crt-overlay` in `web/shell.html`), so it costs nothing.
+- **▣ ASCII** — the engine downsamples each frame into a 100×56 grid of the
+  *current* (post-filter) colors (`VID_BuildAscii` in `web/vid_sdl.c`, exported
+  via `Web_GetAscii`/`Web_AsciiEnable`); the shell reads that grid every frame
+  and draws glyphs over the canvas on a `<canvas>` overlay. Because it samples
+  the filtered colors, the ASCII view follows the active theme — green for
+  Matrix, red/orange for Red Hot, magenta/cyan for Synthwave, full color for
+  Normal.
+
+Filters and FX stack — e.g. Red Hot + CRT.
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.
