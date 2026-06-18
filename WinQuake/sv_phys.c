@@ -52,6 +52,7 @@ static	vec3_t	vec_origin = {0.0, 0.0, 0.0};
 #define	MOVE_EPSILON	0.01
 
 void SV_Physics_Toss (edict_t *ent);
+void Procgen_PortalThink (void);	// web procgen slipgate (web/procgen.c)
 
 /*
 ================
@@ -1559,6 +1560,8 @@ void SV_Physics (void)
 	
 	if (pr_global_struct->force_retouch)
 		pr_global_struct->force_retouch--;	
+
+	Procgen_PortalThink ();		// open/teleport the procgen slipgate
 
 	sv.time += host_frametime;
 }

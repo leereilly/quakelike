@@ -174,6 +174,16 @@ static unsigned char	pg_floortex[PG_NCELL][PG_NCELL];// floor texture per cell
 static int		pg_height;			// shared ceiling height
 static int		pg_start_cx, pg_start_cy;	// spawn cell
 
+// Slipgate: a framed warp surface set into one wall of the exit room. Reaching
+// it (after the level is cleared) warps the player to a fresh random dungeon.
+static int		pg_portal_cx, pg_portal_cy;	// exit room cell
+static int		pg_portal_side;			// 0=-X 1=+X 2=-Y 3=+Y
+static qboolean		pg_have_portal;			// a portal was placed
+static int		pg_portal_x, pg_portal_y, pg_portal_z;	// world centre
+static qboolean		pg_portal_open;			// level cleared, gate live
+static qboolean		pg_portal_announced;		// centerprint shown
+static qboolean		pg_portal_used;			// transport in flight
+
 static int		pg_solidleaf;			// shared solid leaf index
 static int		pg_render_root;			// model headnode[0]
 static int		pg_hull1_root, pg_hull2_root;	// model headnode[1..2]
@@ -295,6 +305,8 @@ static void PG_EntCat (const char *s)
 #define	PG_ROLE_WALL	0
 #define	PG_ROLE_FLOOR	1
 #define	PG_ROLE_CEIL	2
+#define	PG_ROLE_PORTAL	3	// the slipgate surface (a '*' warp texture)
+#define	PG_ROLE_FRAME	4	// the slipgate's surrounding frame
 
 typedef struct { const char *name; int role; } pg_texpick_t;
 
@@ -310,6 +322,8 @@ static const pg_texpick_t pg_texpick[] = {
 	{ "sfloor4_2", PG_ROLE_FLOOR },
 	{ "ground1_6", PG_ROLE_FLOOR },
 	{ "tlight10",  PG_ROLE_CEIL },
+	{ "*teleport", PG_ROLE_PORTAL },	// turbulent slipgate surface
+	{ "slip1",     PG_ROLE_FRAME },		// gate frame / surround
 };
 #define	PG_NUMTEX	((int)(sizeof(pg_texpick)/sizeof(pg_texpick[0])))
 
@@ -319,6 +333,7 @@ static int		pg_tix[PG_NUMTEX], pg_tiy[PG_NUMTEX], pg_tiz[PG_NUMTEX];
 static int		pg_wall_opt[PG_NUMTEX], pg_num_wall;
 static int		pg_floor_opt[PG_NUMTEX], pg_num_floor;
 static int		pg_ceil_tex;
+static int		pg_portal_tex, pg_frame_tex;
 
 static int PG_LE32 (const unsigned char *p)
 {
@@ -406,6 +421,7 @@ static void PG_SetupTexinfos (void)
 
 	pg_num_wall = pg_num_floor = 0;
 	pg_ceil_tex = 0;
+	pg_portal_tex = pg_frame_tex = 0;
 	for (i = 0; i < PG_NUMTEX; i++)
 	{
 		pg_tix[i] = PG_AddTexinfo (0,1,0,  0,0,-1, i);	// X-wall: s=+Y t=-Z
@@ -413,9 +429,11 @@ static void PG_SetupTexinfos (void)
 		pg_tiz[i] = PG_AddTexinfo (1,0,0,  0,1,0,  i);	// floor/ceiling
 		switch (pg_texpick[i].role)
 		{
-		case PG_ROLE_WALL:  pg_wall_opt[pg_num_wall++] = i; break;
-		case PG_ROLE_FLOOR: pg_floor_opt[pg_num_floor++] = i; break;
-		case PG_ROLE_CEIL:  pg_ceil_tex = i; break;
+		case PG_ROLE_WALL:   pg_wall_opt[pg_num_wall++] = i; break;
+		case PG_ROLE_FLOOR:  pg_floor_opt[pg_num_floor++] = i; break;
+		case PG_ROLE_CEIL:   pg_ceil_tex = i; break;
+		case PG_ROLE_PORTAL: pg_portal_tex = i; break;
+		case PG_ROLE_FRAME:  pg_frame_tex = i; break;
 		}
 	}
 }
@@ -437,6 +455,57 @@ static void PG_OpenRoom (int cx, int cy)
 	pg_cellopen[cx][cy] = 1;
 	pg_walltex[cx][cy]  = pg_wall_opt[pg_range (0, pg_num_wall - 1)];
 	pg_floortex[cx][cy] = pg_floor_opt[pg_range (0, pg_num_floor - 1)];
+}
+
+// Choose the exit room (the open room farthest from the spawn) and a solid
+// wall of it to host the slipgate. Records the room cell, the wall side, and
+// the world-space centre of the gate for the proximity trigger.
+static void PG_PlacePortal (void)
+{
+	int	cx, cy, best = -1, bestcx = pg_start_cx, bestcy = pg_start_cy;
+	int	dx[4] = { -1, 1, 0, 0 };
+	int	dy[4] = { 0, 0, -1, 1 };
+	int	s;
+
+	pg_have_portal = false;
+
+	for (cx = 0; cx < pg_nx; cx += 2)
+		for (cy = 0; cy < pg_ny; cy += 2)
+		{
+			int d;
+			if (!pg_cellopen[cx][cy])
+				continue;
+			d = abs (cx - pg_start_cx) + abs (cy - pg_start_cy);
+			if (d > best)
+			{
+				best = d;
+				bestcx = cx;
+				bestcy = cy;
+			}
+		}
+
+	pg_portal_cx = bestcx;
+	pg_portal_cy = bestcy;
+
+	// pick a side whose neighbouring cell is solid (so the gate sits in a
+	// real wall, not an open passage)
+	for (s = 0; s < 4; s++)
+		if (!PG_OpenCell (bestcx + dx[s], bestcy + dy[s]))
+		{
+			int x0 = pg_gx[bestcx], x1 = pg_gx[bestcx + 1];
+			int y0 = pg_gy[bestcy], y1 = pg_gy[bestcy + 1];
+			pg_portal_side = s;
+			pg_have_portal = true;
+			pg_portal_z = 56;
+			switch (s)
+			{
+			case 0: pg_portal_x = x0; pg_portal_y = (y0 + y1) / 2; break;	// -X wall
+			case 1: pg_portal_x = x1; pg_portal_y = (y0 + y1) / 2; break;	// +X wall
+			case 2: pg_portal_x = (x0 + x1) / 2; pg_portal_y = y0; break;	// -Y wall
+			case 3: pg_portal_x = (x0 + x1) / 2; pg_portal_y = y1; break;	// +Y wall
+			}
+			break;
+		}
 }
 
 // Lay out an interleaved room/wall grid. A random walk over the rooms opens a
@@ -499,11 +568,60 @@ static void PG_Layout (void)
 				pg_walltex[cx][cy]  = pg_wall_opt[pg_num_wall - 1];
 				pg_floortex[cx][cy] = pg_floor_opt[0];
 			}
+
+	PG_PlacePortal ();
 }
 
 //=========================================================================
 // Per-cell geometry
 //=========================================================================
+
+// Emit one axis-aligned wall sub-rectangle on the given side. (u, z) ranges
+// select a patch of the wall; winding matches the full-wall quads so the
+// visible normal points into the room.
+static int PG_AddWallRect (int side, int planenum, int fixed,
+			   int ua, int ub, int za, int zb, int ti)
+{
+	switch (side)
+	{
+	case 0:	// -X wall at x=fixed, normal +X, u=Y
+		return PG_AddQuad (planenum, 0, ti,
+			fixed,ua,za,  fixed,ub,za,  fixed,ub,zb,  fixed,ua,zb);
+	case 1:	// +X wall at x=fixed, normal -X, u=Y
+		return PG_AddQuad (planenum, 1, ti,
+			fixed,ua,za,  fixed,ua,zb,  fixed,ub,zb,  fixed,ub,za);
+	case 2:	// -Y wall at y=fixed, normal +Y, u=X
+		return PG_AddQuad (planenum, 0, ti,
+			ua,fixed,za,  ua,fixed,zb,  ub,fixed,zb,  ub,fixed,za);
+	default:// +Y wall at y=fixed, normal -Y, u=X
+		return PG_AddQuad (planenum, 1, ti,
+			ua,fixed,za,  ub,fixed,za,  ub,fixed,zb,  ua,fixed,zb);
+	}
+}
+
+// Emit a framed slipgate set into a wall: a centred warp panel surrounded by
+// gate-frame faces. All faces are coplanar (same wall plane/side), so the
+// generic node chain renders them as one flush wall. Returns the new face count.
+static int PG_EmitPortalWall (int side, int planenum, int fixed,
+			      int a0, int a1, int h,
+			      int *fpl, int *fside, int *fidx, int n)
+{
+	int	uc = (a0 + a1) / 2, uL = uc - 32, uR = uc + 32;
+	int	ztop = (h - 8 < 112) ? (h - 8) : 112;
+	int	sideflag = (side == 0 || side == 2) ? 0 : 1;
+	int	frameTI = (side < 2) ? pg_tix[pg_frame_tex]  : pg_tiy[pg_frame_tex];
+	int	portTI  = (side < 2) ? pg_tix[pg_portal_tex] : pg_tiy[pg_portal_tex];
+
+	fpl[n]=planenum; fside[n]=sideflag;	// frame: left of the gate
+	fidx[n]=PG_AddWallRect (side, planenum, fixed, a0, uL, 0, h, frameTI); n++;
+	fpl[n]=planenum; fside[n]=sideflag;	// frame: right of the gate
+	fidx[n]=PG_AddWallRect (side, planenum, fixed, uR, a1, 0, h, frameTI); n++;
+	fpl[n]=planenum; fside[n]=sideflag;	// frame: lintel above the gate
+	fidx[n]=PG_AddWallRect (side, planenum, fixed, uL, uR, ztop, h, frameTI); n++;
+	fpl[n]=planenum; fside[n]=sideflag;	// the warp surface itself
+	fidx[n]=PG_AddWallRect (side, planenum, fixed, uL, uR, 0, ztop, portTI); n++;
+	return n;
+}
 
 // Build the rendering subtree for one cell. Returns a BSP child code: a node
 // index (>=0), or for a solid cell the shared solid leaf (<0). An open cell
@@ -513,9 +631,10 @@ static void PG_Layout (void)
 static int PG_RenderCell (int cx, int cy)
 {
 	int	x0, y0, x1, y1, z0, z1;
-	int	fpl[6], fside[6], fidx[6], n = 0;
+	int	fpl[16], fside[16], fidx[16], n = 0;
 	int	i, first, emptyleaf;
 	int	tx, ty, tz, tc;		// texinfos for this cell
+	int	is_portal;		// this is the exit room hosting the gate
 
 	if (!PG_OpenCell (cx, cy))
 		return -1 - pg_solidleaf;
@@ -527,30 +646,39 @@ static int PG_RenderCell (int cx, int cy)
 	ty = pg_tiy[pg_walltex[cx][cy]];
 	tz = pg_tiz[pg_floortex[cx][cy]];
 	tc = pg_tiz[pg_ceil_tex];
+	is_portal = (pg_have_portal && cx == pg_portal_cx && cy == pg_portal_cy);
 
 	if (!PG_OpenCell (cx - 1, cy))		// -X wall (normal +X)
 	{
-		fpl[n] = PG_AddPlane (1,0,0, x0, PG_PLANE_X); fside[n] = 0;
-		fidx[n] = PG_AddQuad (fpl[n], 0, tx,
-			x0,y0,z0,  x0,y1,z0,  x0,y1,z1,  x0,y0,z1); n++;
+		int pl = PG_AddPlane (1,0,0, x0, PG_PLANE_X);
+		if (is_portal && pg_portal_side == 0)
+			n = PG_EmitPortalWall (0, pl, x0, y0, y1, z1, fpl, fside, fidx, n);
+		else { fpl[n]=pl; fside[n]=0; fidx[n]=PG_AddQuad (pl, 0, tx,
+			x0,y0,z0,  x0,y1,z0,  x0,y1,z1,  x0,y0,z1); n++; }
 	}
 	if (!PG_OpenCell (cx + 1, cy))		// +X wall (normal -X)
 	{
-		fpl[n] = PG_AddPlane (1,0,0, x1, PG_PLANE_X); fside[n] = 1;
-		fidx[n] = PG_AddQuad (fpl[n], 1, tx,
-			x1,y0,z0,  x1,y0,z1,  x1,y1,z1,  x1,y1,z0); n++;
+		int pl = PG_AddPlane (1,0,0, x1, PG_PLANE_X);
+		if (is_portal && pg_portal_side == 1)
+			n = PG_EmitPortalWall (1, pl, x1, y0, y1, z1, fpl, fside, fidx, n);
+		else { fpl[n]=pl; fside[n]=1; fidx[n]=PG_AddQuad (pl, 1, tx,
+			x1,y0,z0,  x1,y0,z1,  x1,y1,z1,  x1,y1,z0); n++; }
 	}
 	if (!PG_OpenCell (cx, cy - 1))		// -Y wall (normal +Y)
 	{
-		fpl[n] = PG_AddPlane (0,1,0, y0, PG_PLANE_Y); fside[n] = 0;
-		fidx[n] = PG_AddQuad (fpl[n], 0, ty,
-			x0,y0,z0,  x0,y0,z1,  x1,y0,z1,  x1,y0,z0); n++;
+		int pl = PG_AddPlane (0,1,0, y0, PG_PLANE_Y);
+		if (is_portal && pg_portal_side == 2)
+			n = PG_EmitPortalWall (2, pl, y0, x0, x1, z1, fpl, fside, fidx, n);
+		else { fpl[n]=pl; fside[n]=0; fidx[n]=PG_AddQuad (pl, 0, ty,
+			x0,y0,z0,  x0,y0,z1,  x1,y0,z1,  x1,y0,z0); n++; }
 	}
 	if (!PG_OpenCell (cx, cy + 1))		// +Y wall (normal -Y)
 	{
-		fpl[n] = PG_AddPlane (0,1,0, y1, PG_PLANE_Y); fside[n] = 1;
-		fidx[n] = PG_AddQuad (fpl[n], 1, ty,
-			x0,y1,z0,  x1,y1,z0,  x1,y1,z1,  x0,y1,z1); n++;
+		int pl = PG_AddPlane (0,1,0, y1, PG_PLANE_Y);
+		if (is_portal && pg_portal_side == 3)
+			n = PG_EmitPortalWall (3, pl, y1, x0, x1, z1, fpl, fside, fidx, n);
+		else { fpl[n]=pl; fside[n]=1; fidx[n]=PG_AddQuad (pl, 1, ty,
+			x0,y1,z0,  x1,y1,z0,  x1,y1,z1,  x0,y1,z1); n++; }
 	}
 	// floor (normal +Z)
 	fpl[n] = PG_AddPlane (0,0,1, z0, PG_PLANE_Z); fside[n] = 0;
@@ -864,29 +992,20 @@ static qboolean PG_WriteFile (const char *path, unsigned char *data, int len)
 	return true;
 }
 
-void Procgen_f (void)
+// Generate a dungeon for the given seed and write it to maps/procgen.bsp.
+// Returns the room count, or -1 on failure.
+static int PG_Generate (unsigned int seed)
 {
-	int		px, py, pz;
-	int		cx, cy, rooms;
+	int		px, py, pz, cx, cy, rooms, len;
 	unsigned char	*bsp;
-	int		len;
 
-	// COM_FindFile refuses on-disk paths containing '/' under the shareware
-	// data (a licensing guard). Our generated map lives at maps/procgen.bsp,
-	// so allow directory-tree lookups for it.
-	extern int static_registered;
-	static_registered = 1;
-
-	if (Cmd_Argc () >= 2)
-		pg_seed = (unsigned int)Q_atoi (Cmd_Argv (1));
-	else
-		pg_seed = (unsigned int)(Sys_FloatTime () * 1000.0);
+	pg_seed = seed;
 
 	PG_Reset ();
 	if (!PG_LoadTextures ())
 	{
 		Con_Printf ("procgen: could not load textures from %s\n", PG_TEXSOURCE);
-		return;
+		return -1;
 	}
 	PG_SetupTexinfos ();
 	PG_Layout ();
@@ -901,28 +1020,116 @@ void Procgen_f (void)
 	if (!bsp)
 	{
 		Con_Printf ("procgen: out of memory\n");
-		return;
+		return -1;
 	}
-
 	if (!PG_WriteFile ("id1/maps/procgen.bsp", bsp, len))
 	{
 		Con_Printf ("procgen: could not write map file\n");
 		free (bsp);
-		return;
+		return -1;
 	}
 	free (bsp);
+
+	pg_portal_open = false;		// freshly generated: gate dormant again
+	pg_portal_used = false;
+	pg_portal_announced = false;
 
 	rooms = 0;
 	for (cy = 0; cy < pg_ny; cy += 2)
 		for (cx = 0; cx < pg_nx; cx += 2)
 			rooms += pg_cellopen[cx][cy];
+	return rooms;
+}
+
+void Procgen_f (void)
+{
+	unsigned int	seed;
+	int		rooms;
+
+	// COM_FindFile refuses on-disk paths containing '/' under the shareware
+	// data (a licensing guard). Our generated map lives at maps/procgen.bsp,
+	// so allow directory-tree lookups for it.
+	extern int static_registered;
+	static_registered = 1;
+
+	if (Cmd_Argc () >= 2)
+		seed = (unsigned int)Q_atoi (Cmd_Argv (1));
+	else
+		seed = (unsigned int)(Sys_FloatTime () * 1000.0);
+
+	rooms = PG_Generate (seed);
+	if (rooms < 0)
+		return;
 
 	Con_Printf ("procgen: built %i-room dungeon (seed %u), loading...\n",
-		rooms, pg_seed);
+		rooms, seed);
 	Cbuf_AddText ("map procgen\n");
+}
+
+// Triggered when the player steps into an opened slipgate: roll a fresh dungeon
+// and change to it, carrying weapons/health across like a real level exit.
+static void Procgen_Next_f (void)
+{
+	extern int static_registered;
+	int rooms;
+
+	static_registered = 1;
+	rooms = PG_Generate ((unsigned int)(Sys_FloatTime () * 1000.0) ^ (pg_seed * 2654435761u));
+	if (rooms < 0)
+		return;
+	Con_Printf ("procgen: slipgate to a new %i-room dungeon...\n", rooms);
+	Cbuf_AddText ("changelevel procgen\n");
+}
+
+// Called every server frame. Once the level is cleared the slipgate "opens"
+// (announced to the player); stepping into it warps to a new random dungeon.
+void Procgen_PortalThink (void)
+{
+	edict_t	*pl;
+	float	dx, dy, dz;
+
+	if (!sv.active || pg_seed == 0)
+		return;
+	if (strcmp (sv.name, "procgen") != 0)
+		return;			// not one of our maps
+	if (!pg_have_portal || pg_portal_used)
+		return;
+
+	if (!pg_portal_open)
+	{
+		int total = (int)pr_global_struct->total_monsters;
+		int killed = (int)pr_global_struct->killed_monsters;
+		if (total <= 0 || killed >= total)
+			pg_portal_open = true;
+		else
+			return;
+	}
+
+	pl = svs.clients[0].edict;
+	if (!svs.clients[0].active || !pl || pl->free)
+		return;
+
+	if (!pg_portal_announced)
+	{
+		client_t *cl = &svs.clients[0];
+		MSG_WriteByte (&cl->message, svc_centerprint);
+		MSG_WriteString (&cl->message,
+			"The slipgate roars to life!\nStep through to escape.");
+		pg_portal_announced = true;
+	}
+
+	dx = pl->v.origin[0] - pg_portal_x;
+	dy = pl->v.origin[1] - pg_portal_y;
+	dz = pl->v.origin[2] - pg_portal_z;
+	if (dx*dx + dy*dy < 56.0f*56.0f && dz > -64.0f && dz < 96.0f)
+	{
+		pg_portal_used = true;		// guard against re-triggering
+		Cbuf_AddText ("procgen_next\n");
+	}
 }
 
 void Procgen_Init (void)
 {
 	Cmd_AddCommand ("procgen", Procgen_f);
+	Cmd_AddCommand ("procgen_next", Procgen_Next_f);
 }
