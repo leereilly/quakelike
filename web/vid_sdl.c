@@ -56,6 +56,19 @@ enum {
 cvar_t	vid_filter = {"vid_filter", "0", true};
 static int	vid_filter_current = -1;
 
+// per-palette luminance (0..255), used by the ASCII renderer
+static unsigned char	vid_lum[256];
+
+// ---------------------------------------------------------------------------
+// ASCII mode -- we downsample the 8-bit framebuffer into a small luminance
+// grid here in C; the HTML shell reads it each frame and draws glyphs over the
+// canvas. Keeping the heavy per-pixel averaging in wasm keeps it fast.
+// ---------------------------------------------------------------------------
+#define	ASCII_COLS	100
+#define	ASCII_ROWS	56
+static unsigned char	g_ascii[ASCII_COLS * ASCII_ROWS];
+static int		g_ascii_enabled = 0;
+
 void (*vid_menudrawfn)(void);
 void (*vid_menukeyfn)(int key);
 
@@ -224,6 +237,55 @@ EMSCRIPTEN_KEEPALIVE void Web_SetFilter (int n)
 #endif
 
 
+/*
+================
+VID_BuildAscii
+
+Downsample the current 8-bit frame into the ASCII luminance grid.
+================
+*/
+static void	VID_BuildAscii (void)
+{
+	int		cx, cy, x, y;
+
+	for (cy = 0; cy < ASCII_ROWS; cy++)
+	{
+		int y0 = cy * vid.height / ASCII_ROWS;
+		int y1 = (cy + 1) * vid.height / ASCII_ROWS;
+		if (y1 <= y0)
+			y1 = y0 + 1;
+
+		for (cx = 0; cx < ASCII_COLS; cx++)
+		{
+			int x0 = cx * vid.width / ASCII_COLS;
+			int x1 = (cx + 1) * vid.width / ASCII_COLS;
+			unsigned sum = 0, n = 0;
+
+			if (x1 <= x0)
+				x1 = x0 + 1;
+
+			for (y = y0; y < y1; y++)
+			{
+				pixel_t *row = vid.buffer + y * vid.rowbytes;
+				for (x = x0; x < x1; x++)
+				{
+					sum += vid_lum[row[x]];
+					n++;
+				}
+			}
+			g_ascii[cy * ASCII_COLS + cx] = n ? (unsigned char)(sum / n) : 0;
+		}
+	}
+}
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE void Web_AsciiEnable (int on)	{ g_ascii_enabled = on ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE unsigned char *Web_GetAscii (void)	{ return g_ascii; }
+EMSCRIPTEN_KEEPALIVE int Web_AsciiCols (void)		{ return ASCII_COLS; }
+EMSCRIPTEN_KEEPALIVE int Web_AsciiRows (void)		{ return ASCII_ROWS; }
+#endif
+
+
 void	VID_SetPalette (unsigned char *palette)
 {
 	int		i;
@@ -238,6 +300,7 @@ void	VID_SetPalette (unsigned char *palette)
 
 		st2d_8to32table[i] = (0xFFu << 24) | (r << 16) | (g << 8) | b;
 		d_8to24table[i] = (r << 16) | (g << 8) | b;
+		vid_lum[i] = (unsigned char)((r * 77 + g * 150 + b * 29) >> 8);
 	}
 
 	// keep a copy so the active filter table can be rebuilt at any time
@@ -374,6 +437,9 @@ void	VID_Update (vrect_t *rects)
 	count = vid.width * vid.height;
 	for (i = 0; i < count; i++)
 		dst[i] = st2d_active[src[i]];
+
+	if (g_ascii_enabled)
+		VID_BuildAscii ();
 
 	SDL_UpdateTexture (sdl_texture, NULL, argbbuffer,
 		vid.width * sizeof (unsigned));

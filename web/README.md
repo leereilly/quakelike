@@ -83,6 +83,19 @@ required. Use the buttons under the canvas, or the console command `vidfilter`
 The filters are implemented in `web/vid_sdl.c` (`VID_BuildFilter`). The web UI
 calls the exported `Web_SetFilter()` via `Module.ccall`.
 
+## Post-process FX
+
+Two extra screen effects toggle from the **FX** buttons under the canvas:
+
+- **📺 CRT** — scanlines + a corner vignette + subtle flicker. Pure CSS overlay
+  on the canvas (`#crt-overlay` in `web/shell.html`), so it costs nothing.
+- **▣ ASCII** — the engine downsamples each frame into a 100×56 luminance grid
+  (`VID_BuildAscii` in `web/vid_sdl.c`, exported via `Web_GetAscii`/
+  `Web_AsciiEnable`); the shell reads that grid every frame and draws green
+  phosphor glyphs over the canvas on a `<canvas>` overlay.
+
+Filters and FX stack — e.g. Red Hot + CRT.
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.
