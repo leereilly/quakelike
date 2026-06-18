@@ -25,8 +25,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // the rendering BSP (nodes/leafs), and the collision clip hulls. The result is
 // written into the in-memory filesystem and handed to the normal map loader.
 //
-// v1 generates a single randomized room. The data model and helpers are sized
-// for many rooms so this can grow into full dungeons.
+// v1 generated a single room; this builds a connected grid of rooms (a small
+// dungeon) as a k-d tree BSP over the cell grid, with matching clip hulls.
 
 #include "quakedef.h"
 
@@ -147,6 +147,26 @@ typedef struct {
 
 static pg_build_t	pg;
 
+//=========================================================================
+// Dungeon layout (grid of cells; a connected subset is walkable)
+//=========================================================================
+
+#define	PG_CELL		256		// cell footprint (<=256 keeps surf extents legal)
+#define	PG_GRID		5		// max cells per axis
+#define	PG_HMIN		160
+#define	PG_HMAX		224
+
+static int		pg_gw, pg_gh;			// grid size in cells
+static unsigned char	pg_open[PG_GRID][PG_GRID];	// 1 == walkable cell
+static int		pg_height;			// shared ceiling height
+static int		pg_basex, pg_basey;		// world origin of cell (0,0)
+static int		pg_start_cx, pg_start_cy;	// spawn cell
+
+static int		pg_solidleaf;			// shared solid leaf index
+static int		pg_tex_x, pg_tex_y, pg_tex_z;	// texinfos per orientation
+static int		pg_render_root;			// model headnode[0]
+static int		pg_hull1_root, pg_hull2_root;	// model headnode[1..2]
+
 // deterministic RNG (LCG)
 static unsigned int	pg_seed;
 static int pg_rand (void)
@@ -209,6 +229,20 @@ static int PG_AddFace (int planenum, int side, int texinfo, int *vlist, int n)
 	f->styles[1] = f->styles[2] = f->styles[3] = 255;
 	f->lightofs = -1;			// no lightmap -> fullbright
 	return pg.numfaces++;
+}
+
+// Add an axis-aligned quad: four corners given CCW around the visible
+// (inward) normal. Each corner becomes a fresh vertex.
+static int PG_AddQuad (int planenum, int side, int texinfo,
+	float ax, float ay, float az, float bx, float by, float bz,
+	float cx, float cy, float cz, float dx, float dy, float dz)
+{
+	int vl[4];
+	vl[0] = PG_AddVertex (ax, ay, az);
+	vl[1] = PG_AddVertex (bx, by, bz);
+	vl[2] = PG_AddVertex (cx, cy, cz);
+	vl[3] = PG_AddVertex (dx, dy, dz);
+	return PG_AddFace (planenum, side, texinfo, vl, 4);
 }
 
 static int PG_AddTexinfo (float sx, float sy, float sz,
@@ -294,75 +328,105 @@ static void PG_WriteTextureLump (unsigned char *out)
 }
 
 //=========================================================================
-// Room geometry
+// Dungeon layout
 //=========================================================================
 
-// Build one axis-aligned empty box room. Walls face inward; the interior is a
-// single empty leaf, everything else solid. Adds rendering nodes plus collision
-// clipnodes for player (hull1) and big-monster (hull2) sizes.
-static void PG_BuildRoom (int x0, int y0, int z0, int x1, int y1, int z1)
+static int PG_OpenCell (int cx, int cy)
 {
-	int	tex_x, tex_y, tex_z;	// texinfos per wall orientation
-	int	solidleaf, emptyleaf;
-	int	rp[6];			// render plane indices
-	int	v[8];
-	int	i, f;
-	int	face_verts[6][4];
-	int	face_plane[6] = {0, 1, 2, 3, 4, 5};
-	int	face_side[6]  = {0, 1, 0, 1, 0, 1};
-	int	face_tex[6];
-	int	firstnode;
+	if (cx < 0 || cy < 0 || cx >= pg_gw || cy >= pg_gh)
+		return 0;
+	return pg_open[cx][cy];
+}
 
-	// --- texinfos (1 unit == 1 texel) ---
-	tex_x = PG_AddTexinfo (0,1,0,  0,0,-1, 0);	// X-walls: s=+Y t=-Z
-	tex_y = PG_AddTexinfo (1,0,0,  0,0,-1, 0);	// Y-walls: s=+X t=-Z
-	tex_z = PG_AddTexinfo (1,0,0,  0,1,0,  0);	// floor/ceiling: s=+X t=+Y
-	face_tex[0] = face_tex[1] = tex_x;
-	face_tex[2] = face_tex[3] = tex_y;
-	face_tex[4] = face_tex[5] = tex_z;
+static int PG_CellX0 (int cx) { return pg_basex + cx * PG_CELL; }
+static int PG_CellY0 (int cy) { return pg_basey + cy * PG_CELL; }
 
-	// --- 8 corners, index = xi*4 + yi*2 + zi ---
-	for (i = 0; i < 8; i++)
+// Lay out a connected set of walkable cells via a random walk from the centre
+// (a random walk only ever steps to an adjacent cell, so the result is always
+// fully connected).
+static void PG_Layout (void)
+{
+	int	cx, cy, steps, i;
+
+	pg_gw = pg_range (2, PG_GRID);
+	pg_gh = pg_range (2, PG_GRID);
+	memset (pg_open, 0, sizeof (pg_open));
+
+	cx = pg_gw / 2;
+	cy = pg_gh / 2;
+	pg_start_cx = cx;
+	pg_start_cy = cy;
+	pg_open[cx][cy] = 1;
+
+	steps = pg_gw * pg_gh + pg_range (2, 6);
+	for (i = 0; i < steps; i++)
 	{
-		int xi = (i >> 2) & 1, yi = (i >> 1) & 1, zi = i & 1;
-		v[i] = PG_AddVertex (xi ? x1 : x0, yi ? y1 : y0, zi ? z1 : z0);
+		switch (pg_range (0, 3))
+		{
+		case 0: if (cx > 0)         cx--; break;
+		case 1: if (cx < pg_gw - 1) cx++; break;
+		case 2: if (cy > 0)         cy--; break;
+		case 3: if (cy < pg_gh - 1) cy++; break;
+		}
+		pg_open[cx][cy] = 1;
 	}
-#define	VC(xi,yi,zi)	v[((xi)<<2)|((yi)<<1)|(zi)]
+}
 
-	// --- render planes (canonical positive axial normals) ---
-	rp[0] = PG_AddPlane (1,0,0, x0, PG_PLANE_X);	// min X, interior front
-	rp[1] = PG_AddPlane (1,0,0, x1, PG_PLANE_X);	// max X, interior back
-	rp[2] = PG_AddPlane (0,1,0, y0, PG_PLANE_Y);
-	rp[3] = PG_AddPlane (0,1,0, y1, PG_PLANE_Y);
-	rp[4] = PG_AddPlane (0,0,1, z0, PG_PLANE_Z);
-	rp[5] = PG_AddPlane (0,0,1, z1, PG_PLANE_Z);
+//=========================================================================
+// Per-cell geometry
+//=========================================================================
 
-	// --- face windings (CCW around the inward-facing normal) ---
-	// min X (normal +X)
-	face_verts[0][0]=VC(0,0,0); face_verts[0][1]=VC(0,1,0); face_verts[0][2]=VC(0,1,1); face_verts[0][3]=VC(0,0,1);
-	// max X (normal -X)
-	face_verts[1][0]=VC(1,0,0); face_verts[1][1]=VC(1,0,1); face_verts[1][2]=VC(1,1,1); face_verts[1][3]=VC(1,1,0);
-	// min Y (normal +Y)
-	face_verts[2][0]=VC(0,0,0); face_verts[2][1]=VC(0,0,1); face_verts[2][2]=VC(1,0,1); face_verts[2][3]=VC(1,0,0);
-	// max Y (normal -Y)
-	face_verts[3][0]=VC(0,1,0); face_verts[3][1]=VC(1,1,0); face_verts[3][2]=VC(1,1,1); face_verts[3][3]=VC(0,1,1);
-	// min Z floor (normal +Z)
-	face_verts[4][0]=VC(0,0,0); face_verts[4][1]=VC(1,0,0); face_verts[4][2]=VC(1,1,0); face_verts[4][3]=VC(0,1,0);
-	// max Z ceiling (normal -Z)
-	face_verts[5][0]=VC(0,0,1); face_verts[5][1]=VC(0,1,1); face_verts[5][2]=VC(1,1,1); face_verts[5][3]=VC(1,0,1);
+// Build the rendering subtree for one cell. Returns a BSP child code: a node
+// index (>=0), or for a solid cell the shared solid leaf (<0). An open cell
+// emits a wall only where its neighbour is solid, plus a floor and ceiling,
+// then a node chain (interior side continues, the other side is solid) ending
+// in an empty leaf that marks every face it contains.
+static int PG_RenderCell (int cx, int cy)
+{
+	int	x0, y0, x1, y1, z0, z1;
+	int	fpl[6], fside[6], fidx[6], n = 0;
+	int	i, first, emptyleaf;
 
-	for (i = 0; i < 6; i++)
-		f = PG_AddFace (rp[face_plane[i]], face_side[i], face_tex[i], face_verts[i], 4);
-	(void)f;
+	if (!PG_OpenCell (cx, cy))
+		return -1 - pg_solidleaf;
 
-	// --- leafs: 0 = solid (required), 1 = the room interior ---
-	solidleaf = pg.numleafs;
+	x0 = PG_CellX0 (cx); x1 = x0 + PG_CELL;
+	y0 = PG_CellY0 (cy); y1 = y0 + PG_CELL;
+	z0 = 0;              z1 = pg_height;
+
+	if (!PG_OpenCell (cx - 1, cy))		// -X wall (normal +X)
 	{
-		pg_leaf_t *l = &pg.leafs[pg.numleafs++];
-		memset (l, 0, sizeof (*l));
-		l->contents = PG_CONTENTS_SOLID;
-		l->visofs = -1;
+		fpl[n] = PG_AddPlane (1,0,0, x0, PG_PLANE_X); fside[n] = 0;
+		fidx[n] = PG_AddQuad (fpl[n], 0, pg_tex_x,
+			x0,y0,z0,  x0,y1,z0,  x0,y1,z1,  x0,y0,z1); n++;
 	}
+	if (!PG_OpenCell (cx + 1, cy))		// +X wall (normal -X)
+	{
+		fpl[n] = PG_AddPlane (1,0,0, x1, PG_PLANE_X); fside[n] = 1;
+		fidx[n] = PG_AddQuad (fpl[n], 1, pg_tex_x,
+			x1,y0,z0,  x1,y0,z1,  x1,y1,z1,  x1,y1,z0); n++;
+	}
+	if (!PG_OpenCell (cx, cy - 1))		// -Y wall (normal +Y)
+	{
+		fpl[n] = PG_AddPlane (0,1,0, y0, PG_PLANE_Y); fside[n] = 0;
+		fidx[n] = PG_AddQuad (fpl[n], 0, pg_tex_y,
+			x0,y0,z0,  x0,y0,z1,  x1,y0,z1,  x1,y0,z0); n++;
+	}
+	if (!PG_OpenCell (cx, cy + 1))		// +Y wall (normal -Y)
+	{
+		fpl[n] = PG_AddPlane (0,1,0, y1, PG_PLANE_Y); fside[n] = 1;
+		fidx[n] = PG_AddQuad (fpl[n], 1, pg_tex_y,
+			x0,y1,z0,  x1,y1,z0,  x1,y1,z1,  x0,y1,z1); n++;
+	}
+	// floor (normal +Z)
+	fpl[n] = PG_AddPlane (0,0,1, z0, PG_PLANE_Z); fside[n] = 0;
+	fidx[n] = PG_AddQuad (fpl[n], 0, pg_tex_z,
+		x0,y0,z0,  x1,y0,z0,  x1,y1,z0,  x0,y1,z0); n++;
+	// ceiling (normal -Z)
+	fpl[n] = PG_AddPlane (0,0,1, z1, PG_PLANE_Z); fside[n] = 1;
+	fidx[n] = PG_AddQuad (fpl[n], 1, pg_tex_z,
+		x0,y0,z1,  x0,y1,z1,  x1,y1,z1,  x1,y0,z1); n++;
+
 	emptyleaf = pg.numleafs;
 	{
 		pg_leaf_t *l = &pg.leafs[pg.numleafs++];
@@ -372,66 +436,156 @@ static void PG_BuildRoom (int x0, int y0, int z0, int x1, int y1, int z1)
 		l->mins[0]=x0; l->mins[1]=y0; l->mins[2]=z0;
 		l->maxs[0]=x1; l->maxs[1]=y1; l->maxs[2]=z1;
 		l->firstmarksurface = pg.nummarksurf;
-		l->nummarksurfaces = 6;
-		for (i = 0; i < 6; i++)
-			pg.marksurf[pg.nummarksurf++] = i;
+		l->nummarksurfaces = n;
+		for (i = 0; i < n; i++)
+			pg.marksurf[pg.nummarksurf++] = fidx[i];
 	}
 
-	// --- rendering nodes: a chain of the 6 walls ---
-	// interior child continues the chain; the other side is solid.
-	firstnode = pg.numnodes;
-	for (i = 0; i < 6; i++)
+	first = pg.numnodes;
+	for (i = 0; i < n; i++)
 	{
 		pg_node_t *nd = &pg.nodes[pg.numnodes++];
-		int interior_is_front = (i & 1) ? 0 : 1;	// planes 0,2,4 front
-		int next = (i < 5) ? (firstnode + i + 1) : (-1 - emptyleaf);
-		int solid = -1 - solidleaf;
-		nd->planenum = rp[i];
+		int interior_is_front = (fside[i] == 0) ? 1 : 0;
+		int next = (i < n - 1) ? (first + i + 1) : (-1 - emptyleaf);
+		int solid = -1 - pg_solidleaf;
+		nd->planenum = fpl[i];
 		if (interior_is_front) { nd->children[0] = next; nd->children[1] = solid; }
 		else                   { nd->children[0] = solid; nd->children[1] = next; }
 		nd->mins[0]=x0; nd->mins[1]=y0; nd->mins[2]=z0;
 		nd->maxs[0]=x1; nd->maxs[1]=y1; nd->maxs[2]=z1;
-		nd->firstface = i;	// the wall face that lies on this plane
+		nd->firstface = fidx[i];
 		nd->numfaces = 1;
 	}
+	return first;
+}
 
-	// --- collision clipnodes for hull1 (player) and hull2 (big) ---
+// Recursively partition a cell range into single cells with axial grid planes
+// (a k-d tree). Each leaf cell becomes a PG_RenderCell subtree, so every leaf
+// of the final BSP is one convex cell.
+static int PG_RenderTree (int cx0, int cx1, int cy0, int cy1)
+{
+	int	nx = cx1 - cx0, ny = cy1 - cy0;
+	int	node, mid, c0, c1;
+
+	if (nx == 1 && ny == 1)
+		return PG_RenderCell (cx0, cy0);
+
+	node = pg.numnodes++;		// reserve before recursing
+	if (nx >= ny)
 	{
-		// expansion offsets baked into the engine's hull defs
-		static const int h1min[3] = {-16,-16,-24}, h1max[3] = {16,16,32};
-		static const int h2min[3] = {-32,-32,-24}, h2max[3] = {32,32,64};
-		int hb[2][6];	// per-hull expanded dists: x0,x1,y0,y1,z0,z1
-		int h;
-
-		hb[0][0]=x0 - h1min[0]; hb[0][1]=x1 - h1max[0];
-		hb[0][2]=y0 - h1min[1]; hb[0][3]=y1 - h1max[1];
-		hb[0][4]=z0 - h1min[2]; hb[0][5]=z1 - h1max[2];
-		hb[1][0]=x0 - h2min[0]; hb[1][1]=x1 - h2max[0];
-		hb[1][2]=y0 - h2min[1]; hb[1][3]=y1 - h2max[1];
-		hb[1][4]=z0 - h2min[2]; hb[1][5]=z1 - h2max[2];
-
-		for (h = 0; h < 2; h++)
-		{
-			int cp[6];
-			int base = pg.numclipnodes;
-			cp[0] = PG_AddPlane (1,0,0, hb[h][0], PG_PLANE_X);
-			cp[1] = PG_AddPlane (1,0,0, hb[h][1], PG_PLANE_X);
-			cp[2] = PG_AddPlane (0,1,0, hb[h][2], PG_PLANE_Y);
-			cp[3] = PG_AddPlane (0,1,0, hb[h][3], PG_PLANE_Y);
-			cp[4] = PG_AddPlane (0,0,1, hb[h][4], PG_PLANE_Z);
-			cp[5] = PG_AddPlane (0,0,1, hb[h][5], PG_PLANE_Z);
-			for (i = 0; i < 6; i++)
-			{
-				pg_clipnode_t *cn = &pg.clipnodes[pg.numclipnodes++];
-				int interior_is_front = (i & 1) ? 0 : 1;
-				int next = (i < 5) ? (base + i + 1) : PG_CONTENTS_EMPTY;
-				cn->planenum = cp[i];
-				if (interior_is_front) { cn->children[0]=next; cn->children[1]=PG_CONTENTS_SOLID; }
-				else                   { cn->children[0]=PG_CONTENTS_SOLID; cn->children[1]=next; }
-			}
-		}
+		mid = cx0 + nx / 2;
+		pg.nodes[node].planenum = PG_AddPlane (1,0,0, PG_CellX0 (mid), PG_PLANE_X);
+		c0 = PG_RenderTree (mid, cx1, cy0, cy1);	// +X side is front
+		c1 = PG_RenderTree (cx0, mid, cy0, cy1);
 	}
-#undef VC
+	else
+	{
+		mid = cy0 + ny / 2;
+		pg.nodes[node].planenum = PG_AddPlane (0,1,0, PG_CellY0 (mid), PG_PLANE_Y);
+		c0 = PG_RenderTree (cx0, cx1, mid, cy1);
+		c1 = PG_RenderTree (cx0, cx1, cy0, mid);
+	}
+	pg.nodes[node].children[0] = c0;
+	pg.nodes[node].children[1] = c1;
+	pg.nodes[node].mins[0] = PG_CellX0 (cx0); pg.nodes[node].maxs[0] = PG_CellX0 (cx1);
+	pg.nodes[node].mins[1] = PG_CellY0 (cy0); pg.nodes[node].maxs[1] = PG_CellY0 (cy1);
+	pg.nodes[node].mins[2] = 0;               pg.nodes[node].maxs[2] = pg_height;
+	pg.nodes[node].firstface = 0;
+	pg.nodes[node].numfaces = 0;
+	return node;
+}
+
+// Collision clip-hull subtree for one cell. Solid-adjacent walls become clip
+// planes offset inward by the hull half-size; open boundaries get no plane so
+// the player passes freely between cells. Returns a clipnode index (>=0) or a
+// contents code (<0).
+static int PG_ClipCell (int h, int cx, int cy)
+{
+	int	x0, y0, x1, y1, z0, z1;
+	int	pl[6], side[6], n = 0;
+	int	i, first;
+	int	hxy = (h == 0) ? 16 : 32;	// player vs big-monster half width
+	int	hzn = 24;			// origin sits 24 above the floor
+	int	hzp = (h == 0) ? 32 : 64;	// head room below the ceiling
+
+	if (!PG_OpenCell (cx, cy))
+		return PG_CONTENTS_SOLID;
+
+	x0 = PG_CellX0 (cx); x1 = x0 + PG_CELL;
+	y0 = PG_CellY0 (cy); y1 = y0 + PG_CELL;
+	z0 = 0;              z1 = pg_height;
+
+	if (!PG_OpenCell (cx - 1, cy)) { pl[n] = PG_AddPlane (1,0,0, x0 + hxy, PG_PLANE_X); side[n] = 0; n++; }
+	if (!PG_OpenCell (cx + 1, cy)) { pl[n] = PG_AddPlane (1,0,0, x1 - hxy, PG_PLANE_X); side[n] = 1; n++; }
+	if (!PG_OpenCell (cx, cy - 1)) { pl[n] = PG_AddPlane (0,1,0, y0 + hxy, PG_PLANE_Y); side[n] = 0; n++; }
+	if (!PG_OpenCell (cx, cy + 1)) { pl[n] = PG_AddPlane (0,1,0, y1 - hxy, PG_PLANE_Y); side[n] = 1; n++; }
+	pl[n] = PG_AddPlane (0,0,1, z0 + hzn, PG_PLANE_Z); side[n] = 0; n++;	// floor
+	pl[n] = PG_AddPlane (0,0,1, z1 - hzp, PG_PLANE_Z); side[n] = 1; n++;	// ceiling
+
+	first = pg.numclipnodes;
+	for (i = 0; i < n; i++)
+	{
+		pg_clipnode_t *cn = &pg.clipnodes[pg.numclipnodes++];
+		int interior_is_front = (side[i] == 0) ? 1 : 0;
+		int next = (i < n - 1) ? (first + i + 1) : PG_CONTENTS_EMPTY;
+		cn->planenum = pl[i];
+		if (interior_is_front) { cn->children[0] = next; cn->children[1] = PG_CONTENTS_SOLID; }
+		else                   { cn->children[0] = PG_CONTENTS_SOLID; cn->children[1] = next; }
+	}
+	return first;
+}
+
+static int PG_ClipTree (int h, int cx0, int cx1, int cy0, int cy1)
+{
+	int	nx = cx1 - cx0, ny = cy1 - cy0;
+	int	node, mid, c0, c1;
+
+	if (nx == 1 && ny == 1)
+		return PG_ClipCell (h, cx0, cy0);
+
+	node = pg.numclipnodes++;	// reserve before recursing
+	if (nx >= ny)
+	{
+		mid = cx0 + nx / 2;
+		pg.clipnodes[node].planenum = PG_AddPlane (1,0,0, PG_CellX0 (mid), PG_PLANE_X);
+		c0 = PG_ClipTree (h, mid, cx1, cy0, cy1);
+		c1 = PG_ClipTree (h, cx0, mid, cy0, cy1);
+	}
+	else
+	{
+		mid = cy0 + ny / 2;
+		pg.clipnodes[node].planenum = PG_AddPlane (0,1,0, PG_CellY0 (mid), PG_PLANE_Y);
+		c0 = PG_ClipTree (h, cx0, cx1, mid, cy1);
+		c1 = PG_ClipTree (h, cx0, cx1, cy0, mid);
+	}
+	pg.clipnodes[node].children[0] = c0;
+	pg.clipnodes[node].children[1] = c1;
+	return node;
+}
+
+// Assemble the whole dungeon: texinfos, the required solid leaf, then the
+// rendering BSP and both collision hulls over the cell grid.
+static void PG_BuildDungeon (void)
+{
+	pg_tex_x = PG_AddTexinfo (0,1,0,  0,0,-1, 0);	// X-walls: s=+Y t=-Z
+	pg_tex_y = PG_AddTexinfo (1,0,0,  0,0,-1, 0);	// Y-walls: s=+X t=-Z
+	pg_tex_z = PG_AddTexinfo (1,0,0,  0,1,0,  0);	// floor/ceiling: s=+X t=+Y
+
+	pg_height = pg_range (PG_HMIN, PG_HMAX);
+	pg_basex = -(pg_gw * PG_CELL) / 2;
+	pg_basey = -(pg_gh * PG_CELL) / 2;
+
+	pg_solidleaf = pg.numleafs;			// leaf 0 must be solid
+	{
+		pg_leaf_t *l = &pg.leafs[pg.numleafs++];
+		memset (l, 0, sizeof (*l));
+		l->contents = PG_CONTENTS_SOLID;
+		l->visofs = -1;
+	}
+
+	pg_render_root = PG_RenderTree (0, pg_gw, 0, pg_gh);
+	pg_hull1_root  = PG_ClipTree (0, 0, pg_gw, 0, pg_gh);
+	pg_hull2_root  = PG_ClipTree (1, 0, pg_gw, 0, pg_gh);
 }
 
 //=========================================================================
@@ -466,7 +620,7 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	// entities
 	pg.entlen = 0;
 	pg.entities[0] = 0;
-	PG_EntCat ("{\n\"classname\" \"worldspawn\"\n\"message\" \"Procedural Room\"\n\"worldtype\" \"0\"\n}\n");
+	PG_EntCat ("{\n\"classname\" \"worldspawn\"\n\"message\" \"Procedural Dungeon\"\n\"worldtype\" \"0\"\n}\n");
 	sprintf (line, "{\n\"classname\" \"info_player_start\"\n\"origin\" \"%i %i %i\"\n\"angle\" \"90\"\n}\n", px, py, pz);
 	PG_EntCat (line);
 
@@ -476,9 +630,9 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	memset (&model, 0, sizeof (model));
 	model.mins[0]=-2048; model.mins[1]=-2048; model.mins[2]=-2048;
 	model.maxs[0]= 2048; model.maxs[1]= 2048; model.maxs[2]= 2048;
-	model.headnode[0] = 0;		// render root node
-	model.headnode[1] = 0;		// hull1 clipnode root
-	model.headnode[2] = 6;		// hull2 clipnode root (after hull1's 6)
+	model.headnode[0] = pg_render_root;	// render root node
+	model.headnode[1] = pg_hull1_root;	// hull1 clipnode root
+	model.headnode[2] = pg_hull2_root;	// hull2 clipnode root
 	model.headnode[3] = 0;
 	model.visleafs = pg.numleafs - 1;	// excluding solid leaf 0
 	model.firstface = 0;
@@ -540,9 +694,8 @@ static qboolean PG_WriteFile (const char *path, unsigned char *data, int len)
 
 void Procgen_f (void)
 {
-	int		dimx, dimy, dimz;
-	int		x0, y0, z0, x1, y1, z1;
 	int		px, py, pz;
+	int		cx, cy, rooms;
 	unsigned char	*bsp;
 	int		len;
 
@@ -558,22 +711,13 @@ void Procgen_f (void)
 		pg_seed = (unsigned int)(Sys_FloatTime () * 1000.0);
 
 	PG_Reset ();
+	PG_Layout ();
+	PG_BuildDungeon ();
 
-	// a single randomized room. Faces stay <= 256 units so software surface
-	// extents remain valid.
-	dimx = pg_range (192, 256);
-	dimy = pg_range (192, 256);
-	dimz = pg_range (160, 224);
-
-	x0 = -dimx / 2; x1 = x0 + dimx;
-	y0 = -dimy / 2; y1 = y0 + dimy;
-	z0 = 0;         z1 = z0 + dimz;
-
-	PG_BuildRoom (x0, y0, z0, x1, y1, z1);
-
-	px = (x0 + x1) / 2;
-	py = (y0 + y1) / 2;
-	pz = z0 + 40;
+	// spawn in the middle of the starting cell
+	px = PG_CellX0 (pg_start_cx) + PG_CELL / 2;
+	py = PG_CellY0 (pg_start_cy) + PG_CELL / 2;
+	pz = 40;
 
 	bsp = PG_Serialize (&len, px, py, pz);
 	if (!bsp)
@@ -590,8 +734,13 @@ void Procgen_f (void)
 	}
 	free (bsp);
 
-	Con_Printf ("procgen: built %ix%ix%i room (seed %u), loading...\n",
-		dimx, dimy, dimz, pg_seed);
+	rooms = 0;
+	for (cy = 0; cy < pg_gh; cy++)
+		for (cx = 0; cx < pg_gw; cx++)
+			rooms += pg_open[cx][cy];
+
+	Con_Printf ("procgen: built %i-room dungeon (seed %u), loading...\n",
+		rooms, pg_seed);
 	Cbuf_AddText ("map procgen\n");
 }
 
