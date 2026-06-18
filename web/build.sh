@@ -71,6 +71,8 @@ LDFLAGS=(
 	-sSTACK_SIZE=5MB
 	-sFORCE_FILESYSTEM=1
 	-sEXIT_RUNTIME=0
+	-sEXPORTED_FUNCTIONS=_main,_Web_SetFilter
+	-sEXPORTED_RUNTIME_METHODS=ccall,cwrap
 	-Wl,--allow-multiple-definition
 	-lidbfs.js
 	--shell-file "$SCRIPT_DIR/shell.html"

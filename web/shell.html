@@ -55,6 +55,9 @@
   }
   button.qbtn:hover { background: #2a2a2a; border-color: #b03020; }
   button.qbtn:disabled { opacity: 0.4; cursor: default; }
+  button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
+  #controls button.qbtn { margin: 2px; }
+  #filters { display: inline-block; margin-left: 8px; }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
      preserves its intrinsic ratio). */
@@ -83,12 +86,18 @@
 <body>
 <div id="wrap">
   <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click or the button below for fullscreen</div>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the video filters below (or type <code>vidfilter</code> in the console)</div>
   <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
   <div id="status">Loading&hellip;</div>
   <progress hidden id="progress" max="100" value="0"></progress>
   <div id="controls">
     <button class="qbtn" disabled id="fullscreen-btn" type="button">Fullscreen</button>
+    <span id="filters">
+      <button class="qbtn filter-btn" disabled type="button" data-filter="0">Normal</button>
+      <button class="qbtn filter-btn" disabled type="button" data-filter="1">&#128293; Red Hot</button>
+      <button class="qbtn filter-btn" disabled type="button" data-filter="2">&#127750; Synthwave</button>
+      <button class="qbtn filter-btn" disabled type="button" data-filter="3">&#129001; Matrix</button>
+    </span>
   </div>
   <textarea id="output" readonly></textarea>
 </div>
@@ -185,6 +194,37 @@
 
     // Double-clicking the canvas also goes fullscreen.
     canvasElement.addEventListener('dblclick', goFullscreen);
+  })();
+
+  // ---- Video filters (palette remaps in the engine) ----
+  (function () {
+    var buttons = Array.prototype.slice.call(
+      document.querySelectorAll('.filter-btn'));
+
+    function setFilter(n) {
+      try {
+        Module.ccall('Web_SetFilter', null, ['number'], [n]);
+      } catch (e) {
+        console.warn('Web_SetFilter unavailable:', e);
+      }
+      buttons.forEach(function (b) {
+        b.classList.toggle('active', +b.dataset.filter === n);
+      });
+      canvasElement.focus();
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        setFilter(+b.dataset.filter);
+      });
+    });
+
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      buttons.forEach(function (b) { b.disabled = false; });
+      buttons[0].classList.add('active');
+    };
   })();
 </script>
 {{{ SCRIPT }}}

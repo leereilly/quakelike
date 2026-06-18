@@ -66,6 +66,23 @@ python3 -m http.server 8000
 - **Fullscreen**: click the **Fullscreen** button under the canvas, or
   double-click the canvas. Press **ESC** (or F11) to exit.
 
+## Video filters
+
+Because the software renderer is fully palettized, the whole game can be
+recolored in real time by remapping the 256-color table — no GPU shaders
+required. Use the buttons under the canvas, or the console command `vidfilter`
+(cycles), or set the archived cvar `vid_filter` directly:
+
+| `vid_filter` | Look |
+|---|---|
+| `0` | Normal |
+| `1` | 🔥 Red Hot (thermal / predator vision) |
+| `2` | 🌆 Synthwave (neon magenta → cyan) |
+| `3` | 🟩 Matrix (green phosphor) |
+
+The filters are implemented in `web/vid_sdl.c` (`VID_BuildFilter`). The web UI
+calls the exported `Web_SetFilter()` via `Module.ccall`.
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.

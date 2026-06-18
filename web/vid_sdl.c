@@ -23,13 +23,38 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "d_local.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 viddef_t	vid;				// global video state
 
 unsigned short	d_8to16table[256];
 unsigned	d_8to24table[256];
 
-// 32-bit (ARGB8888) lookup built from the current 8-bit palette
+// 32-bit (ARGB8888) lookup built from the current 8-bit palette (true colors)
 static unsigned	st2d_8to32table[256];
+// the table VID_Update actually samples: true colors with the active filter applied
+static unsigned	st2d_active[256];
+
+// a copy of the current 8-bit palette, so filters can be rebuilt on the fly
+static unsigned char	vid_curpal[768];
+
+// ---------------------------------------------------------------------------
+// Post-palette "video filters" -- because the renderer is fully palettized,
+// remapping the 256-entry color table recolors the entire game for almost no
+// cost. vid_filter selects the look; the table is rebuilt when it changes.
+// ---------------------------------------------------------------------------
+enum {
+	VID_FILTER_NONE = 0,
+	VID_FILTER_THERMAL,		// RED HOT / predator thermal vision
+	VID_FILTER_SYNTHWAVE,	// neon magenta -> cyan
+	VID_FILTER_MATRIX,		// green phosphor monochrome
+	VID_FILTER_COUNT
+};
+
+cvar_t	vid_filter = {"vid_filter", "0", true};
+static int	vid_filter_current = -1;
 
 void (*vid_menudrawfn)(void);
 void (*vid_menukeyfn)(int key);
@@ -95,6 +120,110 @@ static void VID_AllocBuffers (void)
 }
 
 
+static unsigned VID_PackARGB (int r, int g, int b)
+{
+	if (r < 0) r = 0; else if (r > 255) r = 255;
+	if (g < 0) g = 0; else if (g > 255) g = 255;
+	if (b < 0) b = 0; else if (b > 255) b = 255;
+	return (0xFFu << 24) | ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
+}
+
+/*
+================
+VID_BuildFilter
+
+Rebuild st2d_active[] from the stored palette, applying the currently selected
+video filter. Called whenever the palette or vid_filter changes.
+================
+*/
+void	VID_BuildFilter (void)
+{
+	int		i, filter;
+	unsigned char	*pal = vid_curpal;
+
+	filter = (int)vid_filter.value;
+	if (filter < 0 || filter >= VID_FILTER_COUNT)
+		filter = VID_FILTER_NONE;
+	vid_filter_current = filter;
+
+	for (i = 0; i < 256; i++, pal += 3)
+	{
+		int r = pal[0];
+		int g = pal[1];
+		int b = pal[2];
+		int lum = (r * 77 + g * 150 + b * 29) >> 8;	// 0..255 luminance
+
+		switch (filter)
+		{
+		default:
+		case VID_FILTER_NONE:
+			st2d_active[i] = st2d_8to32table[i];
+			break;
+
+		case VID_FILTER_THERMAL:
+			// black -> red -> orange -> yellow -> white heat ramp
+			if (lum < 85)
+				st2d_active[i] = VID_PackARGB (lum * 3, 0, 0);
+			else if (lum < 170)
+				st2d_active[i] = VID_PackARGB (255, (lum - 85) * 3, 0);
+			else
+				st2d_active[i] = VID_PackARGB (255, 255, (lum - 170) * 3);
+			break;
+
+		case VID_FILTER_SYNTHWAVE:
+			// deep purple -> hot magenta -> cyan
+			if (lum < 128)
+			{
+				int t = lum * 2;	// 0..255
+				st2d_active[i] = VID_PackARGB (
+					20 + t * 235 / 255,
+					t * 20 / 255,
+					40 + t * 107 / 255);
+			}
+			else
+			{
+				int t = (lum - 128) * 2;	// 0..255
+				st2d_active[i] = VID_PackARGB (
+					255 - t * 255 / 255,
+					20 + t * 210 / 255,
+					147 + t * 108 / 255);
+			}
+			break;
+
+		case VID_FILTER_MATRIX:
+			// green phosphor monochrome
+			st2d_active[i] = VID_PackARGB (lum / 6, lum + (lum >> 3), lum / 5);
+			break;
+		}
+	}
+}
+
+/*
+================
+VID_CycleFilter_f
+
+Console command "vidfilter": advance to the next video filter.
+================
+*/
+void	VID_CycleFilter_f (void)
+{
+	int	next = (vid_filter_current + 1) % VID_FILTER_COUNT;
+	Cvar_SetValue ("vid_filter", (float)next);
+	VID_BuildFilter ();
+}
+
+#ifdef __EMSCRIPTEN__
+// Called from the HTML shell's filter buttons.
+EMSCRIPTEN_KEEPALIVE void Web_SetFilter (int n)
+{
+	if (n < 0 || n >= VID_FILTER_COUNT)
+		n = VID_FILTER_NONE;
+	Cvar_SetValue ("vid_filter", (float)n);
+	VID_BuildFilter ();
+}
+#endif
+
+
 void	VID_SetPalette (unsigned char *palette)
 {
 	int		i;
@@ -110,6 +239,10 @@ void	VID_SetPalette (unsigned char *palette)
 		st2d_8to32table[i] = (0xFFu << 24) | (r << 16) | (g << 8) | b;
 		d_8to24table[i] = (r << 16) | (g << 8) | b;
 	}
+
+	// keep a copy so the active filter table can be rebuilt at any time
+	memcpy (vid_curpal, palette, sizeof (vid_curpal));
+	VID_BuildFilter ();
 }
 
 void	VID_ShiftPalette (unsigned char *palette)
@@ -189,6 +322,10 @@ void	VID_Init (unsigned char *palette)
 	VID_SetPalette (palette);
 	VID_AllocBuffers ();
 
+	Cvar_RegisterVariable (&vid_filter);
+	Cmd_AddCommand ("vidfilter", VID_CycleFilter_f);
+	VID_BuildFilter ();
+
 	vid_initialized = 1;
 }
 
@@ -227,12 +364,16 @@ void	VID_Update (vrect_t *rects)
 	if (!vid_initialized)
 		return;
 
+	// allow the filter to be changed via the vid_filter cvar (console)
+	if ((int)vid_filter.value != vid_filter_current)
+		VID_BuildFilter ();
+
 	// translate the whole 8-bit frame into the ARGB present buffer
 	src = vid.buffer;
 	dst = argbbuffer;
 	count = vid.width * vid.height;
 	for (i = 0; i < count; i++)
-		dst[i] = st2d_8to32table[src[i]];
+		dst[i] = st2d_active[src[i]];
 
 	SDL_UpdateTexture (sdl_texture, NULL, argbbuffer,
 		vid.width * sizeof (unsigned));
