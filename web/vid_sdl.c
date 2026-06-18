@@ -329,6 +329,8 @@ void	VID_ShiftPalette (unsigned char *palette)
 }
 
 
+void Procgen_Init (void);
+
 void	VID_Init (unsigned char *palette)
 {
 	int		pnum;
@@ -403,6 +405,8 @@ void	VID_Init (unsigned char *palette)
 	Cvar_RegisterVariable (&vid_filter);
 	Cmd_AddCommand ("vidfilter", VID_CycleFilter_f);
 	VID_BuildFilter ();
+
+	Procgen_Init ();
 
 	vid_initialized = 1;
 }

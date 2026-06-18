@@ -50,6 +50,7 @@ SRC_FILES+=(
 	"$SCRIPT_DIR/vid_sdl.c"
 	"$SCRIPT_DIR/in_sdl.c"
 	"$SCRIPT_DIR/snd_sdl.c"
+	"$SCRIPT_DIR/procgen.c"
 )
 
 # --- compiler flags ---------------------------------------------------------
