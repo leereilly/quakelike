@@ -119,16 +119,16 @@ typedef struct {
 // Builder state
 //=========================================================================
 
-#define	PG_MAX_PLANES		1024
-#define	PG_MAX_VERTS		4096
-#define	PG_MAX_EDGES		8192
-#define	PG_MAX_SURFEDGES	8192
-#define	PG_MAX_FACES		2048
+#define	PG_MAX_PLANES		8192
+#define	PG_MAX_VERTS		16384
+#define	PG_MAX_EDGES		32768
+#define	PG_MAX_SURFEDGES	32768
+#define	PG_MAX_FACES		8192
 #define	PG_MAX_TEXINFO		64
-#define	PG_MAX_NODES		1024
-#define	PG_MAX_LEAFS		1024
-#define	PG_MAX_CLIPNODES	2048
-#define	PG_MAX_MARKSURF		8192
+#define	PG_MAX_NODES		8192
+#define	PG_MAX_LEAFS		4096
+#define	PG_MAX_CLIPNODES	16384
+#define	PG_MAX_MARKSURF		32768
 #define	PG_ENTSTRING		8192
 
 typedef struct {
@@ -148,22 +148,33 @@ typedef struct {
 static pg_build_t	pg;
 
 //=========================================================================
-// Dungeon layout (grid of cells; a connected subset is walkable)
+// Dungeon layout
+//
+// Rooms sit on an interleaved grid: even cell lines are rooms, odd lines are
+// the thin walls between them. A wall cell is opened only where the layout
+// connects two rooms (a passage); the rest stay solid, and the odd/odd corner
+// cells are always solid, so the dungeon is divided by real walls and studded
+// with square pillars rather than being one open hall.
 //=========================================================================
 
-#define	PG_CELL		256		// cell footprint (<=256 keeps surf extents legal)
-#define	PG_GRID		5		// max cells per axis
-#define	PG_HMIN		160
+#define	PG_ROOMS	5		// max rooms per axis
+#define	PG_NCELL	(2 * PG_ROOMS - 1)	// interleaved cells per axis
+#define	PG_ROOMMIN	192		// room footprint range (<=256 -> legal extents)
+#define	PG_ROOMMAX	256
+#define	PG_WALLSZ	64		// thickness of walls / depth of passages
+#define	PG_HMIN		176
 #define	PG_HMAX		224
 
-static int		pg_gw, pg_gh;			// grid size in cells
-static unsigned char	pg_open[PG_GRID][PG_GRID];	// 1 == walkable cell
+static int		pg_nx, pg_ny;			// interleaved grid size
+static int		pg_gx[PG_NCELL + 1];		// world X of each cell line
+static int		pg_gy[PG_NCELL + 1];		// world Y of each cell line
+static unsigned char	pg_cellopen[PG_NCELL][PG_NCELL];	// 1 == walkable
+static unsigned char	pg_walltex[PG_NCELL][PG_NCELL];	// wall texture per cell
+static unsigned char	pg_floortex[PG_NCELL][PG_NCELL];// floor texture per cell
 static int		pg_height;			// shared ceiling height
-static int		pg_basex, pg_basey;		// world origin of cell (0,0)
 static int		pg_start_cx, pg_start_cy;	// spawn cell
 
 static int		pg_solidleaf;			// shared solid leaf index
-static int		pg_tex_x, pg_tex_y, pg_tex_z;	// texinfos per orientation
 static int		pg_render_root;			// model headnode[0]
 static int		pg_hull1_root, pg_hull2_root;	// model headnode[1..2]
 
@@ -268,62 +279,144 @@ static void PG_EntCat (const char *s)
 }
 
 //=========================================================================
-// Embedded wall texture (64x64, 4 mip levels, 8-bit palette indices)
+// Real textures, borrowed from a shipped map
+//
+// The browser has no texture WAD compiler, but the shareware maps already
+// carry plenty of miptextures embedded in their TEXTURES lump. We load one
+// map, copy out a handful of named textures verbatim, and assemble a compact
+// dmiptexlump for our own BSP. Each texture keeps its internal mip offsets
+// (which are relative to the miptex, so copying is byte-exact).
 //=========================================================================
 
-#define	PG_TEX_W	64
-#define	PG_TEX_H	64
-// dmiptexlump (nummiptex + 1 ofs) + miptex header (40) + mip pixels
-#define	PG_MIP0		(PG_TEX_W * PG_TEX_H)
-#define	PG_MIP1		((PG_TEX_W/2) * (PG_TEX_H/2))
-#define	PG_MIP2		((PG_TEX_W/4) * (PG_TEX_H/4))
-#define	PG_MIP3		((PG_TEX_W/8) * (PG_TEX_H/8))
-#define	PG_MIPTEX_BYTES	(40 + PG_MIP0 + PG_MIP1 + PG_MIP2 + PG_MIP3)
-#define	PG_TEXLUMP_BYTES	(8 + PG_MIPTEX_BYTES)
+#define	PG_TEXSOURCE	"maps/e1m1.bsp"
+#define	PG_MAX_TEXBYTES	(256 * 1024)
 
-// A stone-block pattern: mortar grid lines around two-tone blocks. Renders
-// with clear depth cues now that surfaces draw correctly.
-static unsigned char PG_Texel (int x, int y)
+// roles let the generator pick an appropriate texture per surface
+#define	PG_ROLE_WALL	0
+#define	PG_ROLE_FLOOR	1
+#define	PG_ROLE_CEIL	2
+
+typedef struct { const char *name; int role; } pg_texpick_t;
+
+static const pg_texpick_t pg_texpick[] = {
+	{ "tech08_1",  PG_ROLE_WALL },
+	{ "comp1_1",   PG_ROLE_WALL },
+	{ "comp1_4",   PG_ROLE_WALL },
+	{ "tech01_7",  PG_ROLE_WALL },
+	{ "ecop1_1",   PG_ROLE_WALL },
+	{ "twall1_1",  PG_ROLE_WALL },
+	{ "twall2_2",  PG_ROLE_WALL },
+	{ "tech07_2",  PG_ROLE_WALL },
+	{ "sfloor4_2", PG_ROLE_FLOOR },
+	{ "ground1_6", PG_ROLE_FLOOR },
+	{ "tlight10",  PG_ROLE_CEIL },
+};
+#define	PG_NUMTEX	((int)(sizeof(pg_texpick)/sizeof(pg_texpick[0])))
+
+static unsigned char	pg_texdata[PG_MAX_TEXBYTES];	// finished texture lump
+static int		pg_texlen;
+static int		pg_tix[PG_NUMTEX], pg_tiy[PG_NUMTEX], pg_tiz[PG_NUMTEX];
+static int		pg_wall_opt[PG_NUMTEX], pg_num_wall;
+static int		pg_floor_opt[PG_NUMTEX], pg_num_floor;
+static int		pg_ceil_tex;
+
+static int PG_LE32 (const unsigned char *p)
 {
-	int gx = x & 15, gy = y & 15;
-	int bx = x >> 4, by = y >> 4;
-	if (gx == 0 || gy == 0)
-		return 0x1d;		// dark mortar line
-	// stagger every other row like real masonry, alternate two block shades
-	if (((bx + (by & 1)) ^ by) & 1)
-		return 0x6a;		// lighter stone
-	return 0x6d;			// darker stone
+	return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
 }
 
-static void PG_WriteTextureLump (unsigned char *out)
+// Locate a named miptex inside a map's TEXTURES lump. Returns the offset of the
+// miptex within the lump and its byte length, or 0 on failure.
+static int PG_FindMiptex (const unsigned char *lump, int lumplen,
+			  const char *name, int *out_len)
 {
-	int	x, y, mip, w, h, step;
-	unsigned char *p;
-	int	*hdr = (int *)out;
+	int	nummip, i, dofs, w, h, blob;
 
-	hdr[0] = 1;		// nummiptex
-	hdr[1] = 8;		// dataofs[0] -> miptex starts right after
-
-	p = out + 8;
-	memset (p, 0, 16);
-	strcpy ((char *)p, "PROCWALL");
-	((unsigned *)(p + 16))[0] = PG_TEX_W;		// width
-	((unsigned *)(p + 16))[1] = PG_TEX_H;		// height
-	// offsets[4], relative to the miptex start
-	((unsigned *)(p + 24))[0] = 40;
-	((unsigned *)(p + 24))[1] = 40 + PG_MIP0;
-	((unsigned *)(p + 24))[2] = 40 + PG_MIP0 + PG_MIP1;
-	((unsigned *)(p + 24))[3] = 40 + PG_MIP0 + PG_MIP1 + PG_MIP2;
-
-	p += 40;
-	for (mip = 0; mip < 4; mip++)
+	if (lumplen < 4)
+		return 0;
+	nummip = PG_LE32 (lump);
+	for (i = 0; i < nummip; i++)
 	{
-		step = 1 << mip;
-		w = PG_TEX_W / step;
-		h = PG_TEX_H / step;
-		for (y = 0; y < h; y++)
-			for (x = 0; x < w; x++)
-				*p++ = PG_Texel (x * step, y * step);
+		dofs = PG_LE32 (lump + 4 + i * 4);
+		if (dofs < 0 || dofs + 40 > lumplen)
+			continue;
+		if (Q_strcasecmp ((char *)lump + dofs, name))
+			continue;
+		w = PG_LE32 (lump + dofs + 16);
+		h = PG_LE32 (lump + dofs + 20);
+		blob = 40 + w*h + (w/2)*(h/2) + (w/4)*(h/4) + (w/8)*(h/8);
+		if (dofs + blob > lumplen)
+			continue;
+		*out_len = blob;
+		return dofs;
+	}
+	return 0;
+}
+
+// Build pg_texdata from the source map. Returns false if the map or any
+// required texture is missing.
+static qboolean PG_LoadTextures (void)
+{
+	byte		*bsp;
+	const unsigned char *tl;
+	int		tofs, tlen, i, ndata;
+	int		hdrsize, blobcur;
+
+	bsp = COM_LoadTempFile (PG_TEXSOURCE);
+	if (!bsp || PG_LE32 (bsp) != PG_BSPVERSION)
+		return false;
+
+	tofs = PG_LE32 (bsp + 4 + PG_LUMP_TEXTURES * 8);
+	tlen = PG_LE32 (bsp + 4 + PG_LUMP_TEXTURES * 8 + 4);
+	tl = bsp + tofs;
+
+	hdrsize = 4 + 4 * PG_NUMTEX;		// nummiptex + dataofs[]
+	ndata = hdrsize;
+
+	// first pass: lay out offsets and total size
+	for (i = 0; i < PG_NUMTEX; i++)
+	{
+		int len, mofs = PG_FindMiptex (tl, tlen, pg_texpick[i].name, &len);
+		if (!mofs)
+			return false;
+		ndata += len;
+	}
+	if (ndata > PG_MAX_TEXBYTES)
+		return false;
+
+	// second pass: emit the compact lump
+	*(int *)(pg_texdata) = PG_NUMTEX;
+	hdrsize = 4 + 4 * PG_NUMTEX;
+	blobcur = hdrsize;
+	for (i = 0; i < PG_NUMTEX; i++)
+	{
+		int len, mofs = PG_FindMiptex (tl, tlen, pg_texpick[i].name, &len);
+		((int *)(pg_texdata + 4))[i] = blobcur;
+		memcpy (pg_texdata + blobcur, tl + mofs, len);
+		blobcur += len;
+	}
+	pg_texlen = blobcur;
+	return true;
+}
+
+// Create the three axial texinfos for every texture and bucket them by role.
+static void PG_SetupTexinfos (void)
+{
+	int	i;
+
+	pg_num_wall = pg_num_floor = 0;
+	pg_ceil_tex = 0;
+	for (i = 0; i < PG_NUMTEX; i++)
+	{
+		pg_tix[i] = PG_AddTexinfo (0,1,0,  0,0,-1, i);	// X-wall: s=+Y t=-Z
+		pg_tiy[i] = PG_AddTexinfo (1,0,0,  0,0,-1, i);	// Y-wall: s=+X t=-Z
+		pg_tiz[i] = PG_AddTexinfo (1,0,0,  0,1,0,  i);	// floor/ceiling
+		switch (pg_texpick[i].role)
+		{
+		case PG_ROLE_WALL:  pg_wall_opt[pg_num_wall++] = i; break;
+		case PG_ROLE_FLOOR: pg_floor_opt[pg_num_floor++] = i; break;
+		case PG_ROLE_CEIL:  pg_ceil_tex = i; break;
+		}
 	}
 }
 
@@ -333,43 +426,79 @@ static void PG_WriteTextureLump (unsigned char *out)
 
 static int PG_OpenCell (int cx, int cy)
 {
-	if (cx < 0 || cy < 0 || cx >= pg_gw || cy >= pg_gh)
+	if (cx < 0 || cy < 0 || cx >= pg_nx || cy >= pg_ny)
 		return 0;
-	return pg_open[cx][cy];
+	return pg_cellopen[cx][cy];
 }
 
-static int PG_CellX0 (int cx) { return pg_basex + cx * PG_CELL; }
-static int PG_CellY0 (int cy) { return pg_basey + cy * PG_CELL; }
+// Open a room cell and give it random textures.
+static void PG_OpenRoom (int cx, int cy)
+{
+	pg_cellopen[cx][cy] = 1;
+	pg_walltex[cx][cy]  = pg_wall_opt[pg_range (0, pg_num_wall - 1)];
+	pg_floortex[cx][cy] = pg_floor_opt[pg_range (0, pg_num_floor - 1)];
+}
 
-// Lay out a connected set of walkable cells via a random walk from the centre
-// (a random walk only ever steps to an adjacent cell, so the result is always
-// fully connected).
+// Lay out an interleaved room/wall grid. A random walk over the rooms opens a
+// connected set, carving the wall cell between each pair of rooms it steps
+// across into a passage; everything else stays solid.
 static void PG_Layout (void)
 {
-	int	cx, cy, steps, i;
+	int	gw, gh, rx, ry, steps, i, cx, cy;
 
-	pg_gw = pg_range (2, PG_GRID);
-	pg_gh = pg_range (2, PG_GRID);
-	memset (pg_open, 0, sizeof (pg_open));
+	gw = pg_range (2, PG_ROOMS);
+	gh = pg_range (2, PG_ROOMS);
+	pg_nx = 2 * gw - 1;
+	pg_ny = 2 * gh - 1;
 
-	cx = pg_gw / 2;
-	cy = pg_gh / 2;
-	pg_start_cx = cx;
-	pg_start_cy = cy;
-	pg_open[cx][cy] = 1;
+	memset (pg_cellopen, 0, sizeof (pg_cellopen));
 
-	steps = pg_gw * pg_gh + pg_range (2, 6);
+	// cell line coordinates: rooms get a random footprint, walls are thin.
+	// Room sizes are multiples of 32 so every cell boundary stays 16-aligned;
+	// that keeps surface extents == span (<=256) and avoids "Bad surface
+	// extents" from texture-coordinate rounding.
+	pg_gx[0] = 0;
+	for (i = 0; i < pg_nx; i++)
+		pg_gx[i + 1] = pg_gx[i] + ((i & 1) ? PG_WALLSZ : 32 * pg_range (PG_ROOMMIN / 32, PG_ROOMMAX / 32));
+	pg_gy[0] = 0;
+	for (i = 0; i < pg_ny; i++)
+		pg_gy[i + 1] = pg_gy[i] + ((i & 1) ? PG_WALLSZ : 32 * pg_range (PG_ROOMMIN / 32, PG_ROOMMAX / 32));
+	// centre the whole thing on the origin (offset stays a multiple of 16)
+	for (i = 0; i <= pg_nx; i++) pg_gx[i] -= pg_gx[pg_nx] / 2;
+	for (i = 0; i <= pg_ny; i++) pg_gy[i] -= pg_gy[pg_ny] / 2;
+
+	rx = gw / 2;
+	ry = gh / 2;
+	pg_start_cx = 2 * rx;
+	pg_start_cy = 2 * ry;
+	PG_OpenRoom (2 * rx, 2 * ry);
+
+	steps = gw * gh * 2;
 	for (i = 0; i < steps; i++)
 	{
-		switch (pg_range (0, 3))
-		{
-		case 0: if (cx > 0)         cx--; break;
-		case 1: if (cx < pg_gw - 1) cx++; break;
-		case 2: if (cy > 0)         cy--; break;
-		case 3: if (cy < pg_gh - 1) cy++; break;
-		}
-		pg_open[cx][cy] = 1;
+		int dir = pg_range (0, 3);
+		int nrx = rx, nry = ry;
+		if (dir == 0 && rx > 0)      nrx--;
+		else if (dir == 1 && rx < gw - 1) nrx++;
+		else if (dir == 2 && ry > 0) nry--;
+		else if (dir == 3 && ry < gh - 1) nry++;
+		if (nrx == rx && nry == ry)
+			continue;
+		// open the wall cell between the two rooms, then the new room
+		PG_OpenRoom (rx + nrx, ry + nry);	// midpoint cell (even+odd)
+		PG_OpenRoom (2 * nrx, 2 * nry);
+		rx = nrx;
+		ry = nry;
 	}
+
+	// passages get a consistent texture so corridors read distinctly
+	for (cx = 0; cx < pg_nx; cx++)
+		for (cy = 0; cy < pg_ny; cy++)
+			if (pg_cellopen[cx][cy] && ((cx & 1) || (cy & 1)))
+			{
+				pg_walltex[cx][cy]  = pg_wall_opt[pg_num_wall - 1];
+				pg_floortex[cx][cy] = pg_floor_opt[0];
+			}
 }
 
 //=========================================================================
@@ -386,45 +515,50 @@ static int PG_RenderCell (int cx, int cy)
 	int	x0, y0, x1, y1, z0, z1;
 	int	fpl[6], fside[6], fidx[6], n = 0;
 	int	i, first, emptyleaf;
+	int	tx, ty, tz, tc;		// texinfos for this cell
 
 	if (!PG_OpenCell (cx, cy))
 		return -1 - pg_solidleaf;
 
-	x0 = PG_CellX0 (cx); x1 = x0 + PG_CELL;
-	y0 = PG_CellY0 (cy); y1 = y0 + PG_CELL;
-	z0 = 0;              z1 = pg_height;
+	x0 = pg_gx[cx]; x1 = pg_gx[cx + 1];
+	y0 = pg_gy[cy]; y1 = pg_gy[cy + 1];
+	z0 = 0;         z1 = pg_height;
+	tx = pg_tix[pg_walltex[cx][cy]];
+	ty = pg_tiy[pg_walltex[cx][cy]];
+	tz = pg_tiz[pg_floortex[cx][cy]];
+	tc = pg_tiz[pg_ceil_tex];
 
 	if (!PG_OpenCell (cx - 1, cy))		// -X wall (normal +X)
 	{
 		fpl[n] = PG_AddPlane (1,0,0, x0, PG_PLANE_X); fside[n] = 0;
-		fidx[n] = PG_AddQuad (fpl[n], 0, pg_tex_x,
+		fidx[n] = PG_AddQuad (fpl[n], 0, tx,
 			x0,y0,z0,  x0,y1,z0,  x0,y1,z1,  x0,y0,z1); n++;
 	}
 	if (!PG_OpenCell (cx + 1, cy))		// +X wall (normal -X)
 	{
 		fpl[n] = PG_AddPlane (1,0,0, x1, PG_PLANE_X); fside[n] = 1;
-		fidx[n] = PG_AddQuad (fpl[n], 1, pg_tex_x,
+		fidx[n] = PG_AddQuad (fpl[n], 1, tx,
 			x1,y0,z0,  x1,y0,z1,  x1,y1,z1,  x1,y1,z0); n++;
 	}
 	if (!PG_OpenCell (cx, cy - 1))		// -Y wall (normal +Y)
 	{
 		fpl[n] = PG_AddPlane (0,1,0, y0, PG_PLANE_Y); fside[n] = 0;
-		fidx[n] = PG_AddQuad (fpl[n], 0, pg_tex_y,
+		fidx[n] = PG_AddQuad (fpl[n], 0, ty,
 			x0,y0,z0,  x0,y0,z1,  x1,y0,z1,  x1,y0,z0); n++;
 	}
 	if (!PG_OpenCell (cx, cy + 1))		// +Y wall (normal -Y)
 	{
 		fpl[n] = PG_AddPlane (0,1,0, y1, PG_PLANE_Y); fside[n] = 1;
-		fidx[n] = PG_AddQuad (fpl[n], 1, pg_tex_y,
+		fidx[n] = PG_AddQuad (fpl[n], 1, ty,
 			x0,y1,z0,  x1,y1,z0,  x1,y1,z1,  x0,y1,z1); n++;
 	}
 	// floor (normal +Z)
 	fpl[n] = PG_AddPlane (0,0,1, z0, PG_PLANE_Z); fside[n] = 0;
-	fidx[n] = PG_AddQuad (fpl[n], 0, pg_tex_z,
+	fidx[n] = PG_AddQuad (fpl[n], 0, tz,
 		x0,y0,z0,  x1,y0,z0,  x1,y1,z0,  x0,y1,z0); n++;
 	// ceiling (normal -Z)
 	fpl[n] = PG_AddPlane (0,0,1, z1, PG_PLANE_Z); fside[n] = 1;
-	fidx[n] = PG_AddQuad (fpl[n], 1, pg_tex_z,
+	fidx[n] = PG_AddQuad (fpl[n], 1, tc,
 		x0,y0,z1,  x0,y1,z1,  x1,y1,z1,  x1,y0,z1); n++;
 
 	emptyleaf = pg.numleafs;
@@ -474,22 +608,22 @@ static int PG_RenderTree (int cx0, int cx1, int cy0, int cy1)
 	if (nx >= ny)
 	{
 		mid = cx0 + nx / 2;
-		pg.nodes[node].planenum = PG_AddPlane (1,0,0, PG_CellX0 (mid), PG_PLANE_X);
+		pg.nodes[node].planenum = PG_AddPlane (1,0,0, pg_gx[mid], PG_PLANE_X);
 		c0 = PG_RenderTree (mid, cx1, cy0, cy1);	// +X side is front
 		c1 = PG_RenderTree (cx0, mid, cy0, cy1);
 	}
 	else
 	{
 		mid = cy0 + ny / 2;
-		pg.nodes[node].planenum = PG_AddPlane (0,1,0, PG_CellY0 (mid), PG_PLANE_Y);
+		pg.nodes[node].planenum = PG_AddPlane (0,1,0, pg_gy[mid], PG_PLANE_Y);
 		c0 = PG_RenderTree (cx0, cx1, mid, cy1);
 		c1 = PG_RenderTree (cx0, cx1, cy0, mid);
 	}
 	pg.nodes[node].children[0] = c0;
 	pg.nodes[node].children[1] = c1;
-	pg.nodes[node].mins[0] = PG_CellX0 (cx0); pg.nodes[node].maxs[0] = PG_CellX0 (cx1);
-	pg.nodes[node].mins[1] = PG_CellY0 (cy0); pg.nodes[node].maxs[1] = PG_CellY0 (cy1);
-	pg.nodes[node].mins[2] = 0;               pg.nodes[node].maxs[2] = pg_height;
+	pg.nodes[node].mins[0] = pg_gx[cx0]; pg.nodes[node].maxs[0] = pg_gx[cx1];
+	pg.nodes[node].mins[1] = pg_gy[cy0]; pg.nodes[node].maxs[1] = pg_gy[cy1];
+	pg.nodes[node].mins[2] = 0;          pg.nodes[node].maxs[2] = pg_height;
 	pg.nodes[node].firstface = 0;
 	pg.nodes[node].numfaces = 0;
 	return node;
@@ -511,9 +645,9 @@ static int PG_ClipCell (int h, int cx, int cy)
 	if (!PG_OpenCell (cx, cy))
 		return PG_CONTENTS_SOLID;
 
-	x0 = PG_CellX0 (cx); x1 = x0 + PG_CELL;
-	y0 = PG_CellY0 (cy); y1 = y0 + PG_CELL;
-	z0 = 0;              z1 = pg_height;
+	x0 = pg_gx[cx]; x1 = pg_gx[cx + 1];
+	y0 = pg_gy[cy]; y1 = pg_gy[cy + 1];
+	z0 = 0;         z1 = pg_height;
 
 	if (!PG_OpenCell (cx - 1, cy)) { pl[n] = PG_AddPlane (1,0,0, x0 + hxy, PG_PLANE_X); side[n] = 0; n++; }
 	if (!PG_OpenCell (cx + 1, cy)) { pl[n] = PG_AddPlane (1,0,0, x1 - hxy, PG_PLANE_X); side[n] = 1; n++; }
@@ -547,14 +681,14 @@ static int PG_ClipTree (int h, int cx0, int cx1, int cy0, int cy1)
 	if (nx >= ny)
 	{
 		mid = cx0 + nx / 2;
-		pg.clipnodes[node].planenum = PG_AddPlane (1,0,0, PG_CellX0 (mid), PG_PLANE_X);
+		pg.clipnodes[node].planenum = PG_AddPlane (1,0,0, pg_gx[mid], PG_PLANE_X);
 		c0 = PG_ClipTree (h, mid, cx1, cy0, cy1);
 		c1 = PG_ClipTree (h, cx0, mid, cy0, cy1);
 	}
 	else
 	{
 		mid = cy0 + ny / 2;
-		pg.clipnodes[node].planenum = PG_AddPlane (0,1,0, PG_CellY0 (mid), PG_PLANE_Y);
+		pg.clipnodes[node].planenum = PG_AddPlane (0,1,0, pg_gy[mid], PG_PLANE_Y);
 		c0 = PG_ClipTree (h, cx0, cx1, mid, cy1);
 		c1 = PG_ClipTree (h, cx0, cx1, cy0, mid);
 	}
@@ -563,17 +697,11 @@ static int PG_ClipTree (int h, int cx0, int cx1, int cy0, int cy1)
 	return node;
 }
 
-// Assemble the whole dungeon: texinfos, the required solid leaf, then the
-// rendering BSP and both collision hulls over the cell grid.
+// Assemble the whole dungeon: the required solid leaf, then the rendering BSP
+// and both collision hulls over the cell grid.
 static void PG_BuildDungeon (void)
 {
-	pg_tex_x = PG_AddTexinfo (0,1,0,  0,0,-1, 0);	// X-walls: s=+Y t=-Z
-	pg_tex_y = PG_AddTexinfo (1,0,0,  0,0,-1, 0);	// Y-walls: s=+X t=-Z
-	pg_tex_z = PG_AddTexinfo (1,0,0,  0,1,0,  0);	// floor/ceiling: s=+X t=+Y
-
 	pg_height = pg_range (PG_HMIN, PG_HMAX);
-	pg_basex = -(pg_gw * PG_CELL) / 2;
-	pg_basey = -(pg_gh * PG_CELL) / 2;
 
 	pg_solidleaf = pg.numleafs;			// leaf 0 must be solid
 	{
@@ -583,9 +711,9 @@ static void PG_BuildDungeon (void)
 		l->visofs = -1;
 	}
 
-	pg_render_root = PG_RenderTree (0, pg_gw, 0, pg_gh);
-	pg_hull1_root  = PG_ClipTree (0, 0, pg_gw, 0, pg_gh);
-	pg_hull2_root  = PG_ClipTree (1, 0, pg_gw, 0, pg_gh);
+	pg_render_root = PG_RenderTree (0, pg_nx, 0, pg_ny);
+	pg_hull1_root  = PG_ClipTree (0, 0, pg_nx, 0, pg_ny);
+	pg_hull2_root  = PG_ClipTree (1, 0, pg_nx, 0, pg_ny);
 }
 
 //=========================================================================
@@ -606,10 +734,55 @@ static int PG_PutLump (unsigned char *buf, int ofs, pg_lump_t *lump,
 	return ofs + len;
 }
 
+// Scatter monsters and items through the open rooms (skipping the spawn room).
+static void PG_PlaceEntities (void)
+{
+	static const char *monsters[] = {
+		"monster_army", "monster_dog", "monster_ogre",
+		"monster_knight", "monster_zombie", "monster_wizard",
+	};
+	static const char *items[] = {
+		"item_health", "item_shells", "item_spikes",
+		"item_armor1", "weapon_supershotgun", "weapon_nailgun",
+	};
+	char	line[256];
+	int	cx, cy;
+
+	for (cx = 0; cx < pg_nx; cx++)
+		for (cy = 0; cy < pg_ny; cy++)
+		{
+			int ex, ey;
+			if (!pg_cellopen[cx][cy])
+				continue;
+			if ((cx & 1) || (cy & 1))	// only room cells, not passages
+				continue;
+			if (cx == pg_start_cx && cy == pg_start_cy)
+				continue;
+			ex = (pg_gx[cx] + pg_gx[cx + 1]) / 2;
+			ey = (pg_gy[cy] + pg_gy[cy + 1]) / 2;
+
+			if (pg_range (0, 2))		// ~2/3 of rooms get a monster
+			{
+				const char *m = monsters[pg_range (0, 5)];
+				sprintf (line,
+					"{\n\"classname\" \"%s\"\n\"origin\" \"%i %i %i\"\n\"angle\" \"%i\"\n}\n",
+					m, ex, ey, 40, pg_range (0, 3) * 90);
+				PG_EntCat (line);
+			}
+			if (pg_range (0, 1))		// half get an item
+			{
+				const char *it = items[pg_range (0, 5)];
+				sprintf (line,
+					"{\n\"classname\" \"%s\"\n\"origin\" \"%i %i %i\"\n}\n",
+					it, ex + 24, ey + 24, 24);
+				PG_EntCat (line);
+			}
+		}
+}
+
 // Build the entity string and return the finished BSP image. Caller frees.
 static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 {
-	static unsigned char	texlump[PG_TEXLUMP_BYTES];
 	pg_model_t	model;
 	char		line[256];
 	unsigned char	*buf;
@@ -623,8 +796,7 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	PG_EntCat ("{\n\"classname\" \"worldspawn\"\n\"message\" \"Procedural Dungeon\"\n\"worldtype\" \"0\"\n}\n");
 	sprintf (line, "{\n\"classname\" \"info_player_start\"\n\"origin\" \"%i %i %i\"\n\"angle\" \"90\"\n}\n", px, py, pz);
 	PG_EntCat (line);
-
-	PG_WriteTextureLump (texlump);
+	PG_PlaceEntities ();
 
 	// one world model
 	memset (&model, 0, sizeof (model));
@@ -638,7 +810,7 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	model.firstface = 0;
 	model.numfaces = pg.numfaces;
 
-	cap = 256 * 1024;
+	cap = 512 * 1024;
 	buf = malloc (cap);
 	if (!buf)
 		return NULL;
@@ -649,7 +821,7 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	ofs = sizeof (pg_header_t);
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_ENTITIES], pg.entities, pg.entlen + 1);
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_PLANES], pg.planes, pg.numplanes * sizeof (pg_plane_t));
-	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_TEXTURES], texlump, PG_TEXLUMP_BYTES);
+	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_TEXTURES], pg_texdata, pg_texlen);
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_VERTEXES], pg.verts, pg.numverts * sizeof (pg_vertex_t));
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_VISIBILITY], NULL, 0);
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_NODES], pg.nodes, pg.numnodes * sizeof (pg_node_t));
@@ -711,12 +883,18 @@ void Procgen_f (void)
 		pg_seed = (unsigned int)(Sys_FloatTime () * 1000.0);
 
 	PG_Reset ();
+	if (!PG_LoadTextures ())
+	{
+		Con_Printf ("procgen: could not load textures from %s\n", PG_TEXSOURCE);
+		return;
+	}
+	PG_SetupTexinfos ();
 	PG_Layout ();
 	PG_BuildDungeon ();
 
 	// spawn in the middle of the starting cell
-	px = PG_CellX0 (pg_start_cx) + PG_CELL / 2;
-	py = PG_CellY0 (pg_start_cy) + PG_CELL / 2;
+	px = (pg_gx[pg_start_cx] + pg_gx[pg_start_cx + 1]) / 2;
+	py = (pg_gy[pg_start_cy] + pg_gy[pg_start_cy + 1]) / 2;
 	pz = 40;
 
 	bsp = PG_Serialize (&len, px, py, pz);
@@ -735,9 +913,9 @@ void Procgen_f (void)
 	free (bsp);
 
 	rooms = 0;
-	for (cy = 0; cy < pg_gh; cy++)
-		for (cx = 0; cx < pg_gw; cx++)
-			rooms += pg_open[cx][cy];
+	for (cy = 0; cy < pg_ny; cy += 2)
+		for (cx = 0; cx < pg_nx; cx += 2)
+			rooms += pg_cellopen[cx][cy];
 
 	Con_Printf ("procgen: built %i-room dungeon (seed %u), loading...\n",
 		rooms, pg_seed);
