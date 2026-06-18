@@ -43,6 +43,30 @@
     min-height: 16px;
   }
   #progress { width: 320px; max-width: 90vw; height: 6px; }
+  #controls { margin-top: 10px; }
+  button.qbtn {
+    background: #1a1a1a;
+    color: #c0c0c0;
+    border: 1px solid #444;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 5px 14px;
+    cursor: pointer;
+  }
+  button.qbtn:hover { background: #2a2a2a; border-color: #b03020; }
+  button.qbtn:disabled { opacity: 0.4; cursor: default; }
+  /* When the canvas is the fullscreen element, fill the screen while keeping
+     the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
+     preserves its intrinsic ratio). */
+  canvas.emscripten:fullscreen {
+    width: auto;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    margin: auto;
+    border: none;
+    background: #000;
+  }
   #output {
     width: 640px;
     max-width: 95vw;
@@ -59,10 +83,13 @@
 <body>
 <div id="wrap">
   <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console</div>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click or the button below for fullscreen</div>
   <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
   <div id="status">Loading&hellip;</div>
   <progress hidden id="progress" max="100" value="0"></progress>
+  <div id="controls">
+    <button class="qbtn" disabled id="fullscreen-btn" type="button">Fullscreen</button>
+  </div>
   <textarea id="output" readonly></textarea>
 </div>
 
@@ -126,6 +153,39 @@
   window.onerror = function () {
     Module.setStatus('Exception thrown, see JavaScript console');
   };
+
+  // ---- Fullscreen support ----
+  (function () {
+    var btn = document.getElementById('fullscreen-btn');
+
+    function goFullscreen() {
+      // Prefer the standard Fullscreen API on the canvas. Emscripten's
+      // Module.requestFullscreen helper isn't present in all builds, so fall
+      // back to it only if available. We don't lock the pointer here; the game
+      // captures the mouse on click as usual.
+      var c = canvasElement;
+      if (c.requestFullscreen) {
+        c.requestFullscreen();
+      } else if (c.webkitRequestFullscreen) {
+        c.webkitRequestFullscreen();
+      } else if (Module && typeof Module.requestFullscreen === 'function') {
+        Module.requestFullscreen(false, true);
+      }
+      c.focus();
+    }
+
+    btn.addEventListener('click', goFullscreen);
+
+    // Enable the button once the wasm runtime is up.
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      btn.disabled = false;
+    };
+
+    // Double-clicking the canvas also goes fullscreen.
+    canvasElement.addEventListener('dblclick', goFullscreen);
+  })();
 </script>
 {{{ SCRIPT }}}
 </body>

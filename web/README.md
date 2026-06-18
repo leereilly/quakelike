@@ -63,6 +63,8 @@ python3 -m http.server 8000
 - **Click the canvas** to capture the mouse (pointer lock).
 - Mouse to look, **WASD / arrows** to move, **Ctrl/Mouse1** to fire.
 - **ESC** for the menu, **`** (backtick) for the console.
+- **Fullscreen**: click the **Fullscreen** button under the canvas, or
+  double-click the canvas. Press **ESC** (or F11) to exit.
 
 ## Deploying to GitHub Pages
 
