@@ -863,49 +863,112 @@ static int PG_PutLump (unsigned char *buf, int ofs, pg_lump_t *lump,
 }
 
 // Scatter monsters and items through the open rooms (skipping the spawn room).
+// The player is armed in the spawn room and every level is seeded with enough
+// ammo to clear all of its monsters, so a dungeon can always be finished.
 static void PG_PlaceEntities (void)
 {
+	// Zombies are intentionally excluded: they only die to explosive gibbing,
+	// so with the guaranteed shotgun/nailgun loadout a zombie could never be
+	// killed, leaving the level uncleared and the slipgate shut forever.
 	static const char *monsters[] = {
 		"monster_army", "monster_dog", "monster_ogre",
-		"monster_knight", "monster_zombie", "monster_wizard",
+		"monster_knight", "monster_wizard",
 	};
-	static const char *items[] = {
-		"item_health", "item_shells", "item_spikes",
-		"item_armor1", "weapon_supershotgun", "weapon_nailgun",
-	};
+	static const int mhealth[] = { 30, 25, 200, 75, 80 };
 	char	line[256];
-	int	cx, cy;
+	int	cx, cy, i;
+	int	rx[128], ry[128], nrooms = 0;
+	int	threat = 0;
+	int	sx, sy;
 
+	// collect every non-spawn room centre
 	for (cx = 0; cx < pg_nx; cx++)
 		for (cy = 0; cy < pg_ny; cy++)
 		{
-			int ex, ey;
 			if (!pg_cellopen[cx][cy])
 				continue;
-			if ((cx & 1) || (cy & 1))	// only room cells, not passages
+			if ((cx & 1) || (cy & 1))	// rooms only, not passages
 				continue;
 			if (cx == pg_start_cx && cy == pg_start_cy)
 				continue;
-			ex = (pg_gx[cx] + pg_gx[cx + 1]) / 2;
-			ey = (pg_gy[cy] + pg_gy[cy + 1]) / 2;
-
-			if (pg_range (0, 2))		// ~2/3 of rooms get a monster
+			if (nrooms < 128)
 			{
-				const char *m = monsters[pg_range (0, 5)];
-				sprintf (line,
-					"{\n\"classname\" \"%s\"\n\"origin\" \"%i %i %i\"\n\"angle\" \"%i\"\n}\n",
-					m, ex, ey, 40, pg_range (0, 3) * 90);
-				PG_EntCat (line);
-			}
-			if (pg_range (0, 1))		// half get an item
-			{
-				const char *it = items[pg_range (0, 5)];
-				sprintf (line,
-					"{\n\"classname\" \"%s\"\n\"origin\" \"%i %i %i\"\n}\n",
-					it, ex + 24, ey + 24, 24);
-				PG_EntCat (line);
+				rx[nrooms] = (pg_gx[cx] + pg_gx[cx + 1]) / 2;
+				ry[nrooms] = (pg_gy[cy] + pg_gy[cy + 1]) / 2;
+				nrooms++;
 			}
 		}
+
+	// arm the player right where they spawn
+	sx = (pg_gx[pg_start_cx] + pg_gx[pg_start_cx + 1]) / 2;
+	sy = (pg_gy[pg_start_cy] + pg_gy[pg_start_cy + 1]) / 2;
+	sprintf (line, "{\n\"classname\" \"weapon_supershotgun\"\n\"origin\" \"%i %i %i\"\n}\n",
+		sx - 40, sy, 24);
+	PG_EntCat (line);
+	sprintf (line, "{\n\"classname\" \"weapon_nailgun\"\n\"origin\" \"%i %i %i\"\n}\n",
+		sx + 40, sy, 24);
+	PG_EntCat (line);
+
+	// monsters in ~2/3 of rooms, with the odd health/armour pickup
+	for (i = 0; i < nrooms; i++)
+	{
+		if (pg_range (0, 2))
+		{
+			int mi = pg_range (0, 4);
+			sprintf (line,
+				"{\n\"classname\" \"%s\"\n\"origin\" \"%i %i %i\"\n\"angle\" \"%i\"\n}\n",
+				monsters[mi], rx[i], ry[i], 40, pg_range (0, 3) * 90);
+			PG_EntCat (line);
+			threat += mhealth[mi];
+		}
+		if (pg_range (0, 2) == 0)
+		{
+			const char *it = pg_range (0, 1) ? "item_health" : "item_armor1";
+			sprintf (line, "{\n\"classname\" \"%s\"\n\"origin\" \"%i %i %i\"\n}\n",
+				it, rx[i] + 24, ry[i] + 24, 24);
+			PG_EntCat (line);
+		}
+	}
+
+	// Seed enough ammo to clear the level. Big shell/nail boxes carry ~40
+	// shells (~24 dmg each via the super shotgun) and ~50 nails (~9 dmg each);
+	// keep dropping them across the rooms until their damage potential covers
+	// every monster three times over (margin for misses; the player also keeps
+	// the starting shotgun + 25 shells). A floor guarantees a stash even on
+	// near-empty maps.
+	{
+		int need = threat * 3 + 200;
+		int got = 0;
+		int slot = 0;
+
+		// a starter box at the spawn point so the player is stocked at once
+		sprintf (line,
+			"{\n\"classname\" \"item_shells\"\n\"spawnflags\" \"1\"\n\"origin\" \"%i %i %i\"\n}\n",
+			sx, sy + 48, 24);
+		PG_EntCat (line);
+		got += 40 * 24;
+
+		while (got < need && nrooms > 0 && slot < 256)
+		{
+			int r = slot % nrooms;
+			if (slot & 1)
+			{
+				sprintf (line,
+					"{\n\"classname\" \"item_spikes\"\n\"spawnflags\" \"1\"\n\"origin\" \"%i %i %i\"\n}\n",
+					rx[r] - 28, ry[r] + 28, 24);
+				got += 50 * 9;
+			}
+			else
+			{
+				sprintf (line,
+					"{\n\"classname\" \"item_shells\"\n\"spawnflags\" \"1\"\n\"origin\" \"%i %i %i\"\n}\n",
+					rx[r] - 28, ry[r] - 28, 24);
+				got += 40 * 24;
+			}
+			PG_EntCat (line);
+			slot++;
+		}
+	}
 }
 
 // Build the entity string and return the finished BSP image. Caller frees.
