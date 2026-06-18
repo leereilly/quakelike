@@ -1,0 +1,75 @@
+name: Deploy WebAssembly Quake to GitHub Pages
+
+# Builds the software-rendered WinQuake to WebAssembly with Emscripten and
+# publishes web/dist to GitHub Pages.
+#
+# The shareware pak0.pak is downloaded at build time and is NOT committed to the
+# repository (id Software data is copyrighted and not redistributable here).
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'WinQuake/**'
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs for the same ref.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+          actions-cache-folder: emsdk-cache
+
+      - name: Fetch shareware game data
+        # Shareware pak0.pak (~18 MB). Freely downloadable; we fetch it here so
+        # the deployed build is playable without committing id data to the repo.
+        env:
+          PAK_URL: https://archive.org/download/quake-shareware-pak/PAK0.PAK
+        run: |
+          mkdir -p web/id1
+          curl -fSL --retry 3 -o web/id1/pak0.pak "$PAK_URL"
+          # sanity check: a PAK file starts with the ascii magic "PACK"
+          if [ "$(head -c 4 web/id1/pak0.pak)" != "PACK" ]; then
+            echo "Downloaded data is not a valid PAK file" >&2
+            exit 1
+          fi
+          ls -la web/id1
+
+      - name: Build
+        run: |
+          chmod +x web/build.sh
+          ./web/build.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
