@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quake (WebAssembly)</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    color: #c0c0c0;
+    font-family: monospace;
+    height: 100%;
+  }
+  #wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+    box-sizing: border-box;
+    padding: 16px;
+  }
+  h1 {
+    font-size: 18px;
+    letter-spacing: 4px;
+    color: #b03020;
+    margin: 8px 0 4px;
+  }
+  #hint { font-size: 12px; color: #888; margin-bottom: 12px; }
+  canvas.emscripten {
+    border: 1px solid #333;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #000;
+    width: 640px;
+    height: 400px;
+    max-width: 95vw;
+  }
+  #status {
+    margin-top: 10px;
+    font-size: 12px;
+    min-height: 16px;
+  }
+  #progress { width: 320px; max-width: 90vw; height: 6px; }
+  #output {
+    width: 640px;
+    max-width: 95vw;
+    height: 120px;
+    margin-top: 10px;
+    background: #0a0a0a;
+    color: #6a6;
+    border: 1px solid #222;
+    font-size: 11px;
+    resize: vertical;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>QUAKE</h1>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console</div>
+  <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="status">Loading&hellip;</div>
+  <progress hidden id="progress" max="100" value="0"></progress>
+  <textarea id="output" readonly></textarea>
+</div>
+
+<script type="text/javascript">
+  var statusElement = document.getElementById('status');
+  var progressElement = document.getElementById('progress');
+  var outputElement = document.getElementById('output');
+  var canvasElement = document.getElementById('canvas');
+
+  var Module = {
+    canvas: (function () {
+      // Reset the WebGL/2D context if it is lost.
+      canvasElement.addEventListener('webglcontextlost', function (e) {
+        alert('WebGL context lost. You will need to reload the page.');
+        e.preventDefault();
+      }, false);
+      return canvasElement;
+    })(),
+    print: function (text) {
+      if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+      console.log(text);
+      if (outputElement) {
+        outputElement.value += text + "\n";
+        outputElement.scrollTop = outputElement.scrollHeight;
+      }
+    },
+    printErr: function (text) {
+      if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+      console.error(text);
+    },
+    setStatus: function (text) {
+      if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+      if (text === Module.setStatus.last.text) return;
+      var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+      var now = Date.now();
+      if (m && now - Module.setStatus.last.time < 30) return;
+      Module.setStatus.last.time = now;
+      Module.setStatus.last.text = text;
+      if (m) {
+        text = m[1];
+        progressElement.value = parseInt(m[2]) * 100;
+        progressElement.max = parseInt(m[4]) * 100;
+        progressElement.hidden = false;
+      } else {
+        progressElement.value = null;
+        progressElement.max = null;
+        progressElement.hidden = true;
+      }
+      statusElement.innerHTML = text;
+    },
+    totalDependencies: 0,
+    monitorRunDependencies: function (left) {
+      this.totalDependencies = Math.max(this.totalDependencies, left);
+      Module.setStatus(left ?
+        'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' :
+        'All downloads complete.');
+    }
+  };
+
+  Module.setStatus('Downloading...');
+  window.onerror = function () {
+    Module.setStatus('Exception thrown, see JavaScript console');
+  };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
