@@ -99,6 +99,18 @@ Two extra screen effects toggle from the **FX** buttons under the canvas:
 
 Filters and FX stack — e.g. Red Hot + CRT.
 
+## Stream SoundCloud (dark industrial)
+
+Quake's original soundtrack was composed by **Trent Reznor / Nine Inch Nails**,
+so dark industrial is the canonical vibe. The **🎧 Stream SoundCloud** button
+under the canvas toggles an embedded SoundCloud HTML5 player that streams the
+**dark industrial** tag feed (autoplay, continuous). It's lazy-loaded, so
+nothing streams until you click it, and toggling it off tears the player down to
+stop playback.
+
+To stream something else, change the `SOUNDCLOUD_URL` constant in
+`web/shell.html` to any SoundCloud track, playlist, user, or tag permalink.
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.

@@ -94,6 +94,18 @@
   button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
   #controls button.qbtn { margin: 2px; }
   #filters { display: inline-block; margin-left: 8px; }
+  /* SoundCloud streaming widget. Hidden until toggled on; Quake's original
+     soundtrack was Trent Reznor / NIN, so dark industrial is the canonical
+     vibe. */
+  #soundcloud {
+    width: 640px;
+    max-width: 95vw;
+    margin-top: 10px;
+    display: none;
+  }
+  #soundcloud.on { display: block; }
+  #soundcloud iframe { width: 100%; height: 120px; border: 1px solid #222; }
+  #sc-hint { font-size: 11px; color: #888; margin: 4px 0 0; }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
      preserves its intrinsic ratio). */
@@ -122,7 +134,7 @@
 <body>
 <div id="wrap">
   <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII)</div>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; stream dark industrial from SoundCloud</div>
   <div id="stage">
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="crt-overlay"></div>
@@ -141,7 +153,11 @@
     <span id="fx">
       <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
       <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
+      <button class="qbtn" disabled id="soundcloud-btn" type="button">&#127911; Stream SoundCloud</button>
     </span>
+  </div>
+  <div id="soundcloud">
+    <p id="sc-hint">Streaming dark industrial from SoundCloud &middot; in keeping with Quake's NIN soundtrack</p>
   </div>
   <textarea id="output" readonly></textarea>
 </div>
@@ -349,6 +365,53 @@
       } else if (rafId) {
         cancelAnimationFrame(rafId);
         rafId = 0;
+      }
+      canvasElement.focus();
+    });
+
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      btn.disabled = false;
+    };
+  })();
+
+  // ---- SoundCloud streaming (dark industrial, on theme with Quake's NIN OST) ----
+  (function () {
+    // Swap this for any SoundCloud track / playlist / user / tag permalink.
+    // Defaults to the "dark industrial" tag feed.
+    var SOUNDCLOUD_URL = 'https://soundcloud.com/tags/dark%20industrial';
+
+    var panel = document.getElementById('soundcloud');
+    var btn = document.getElementById('soundcloud-btn');
+    var iframe = null;
+    var on = false;
+
+    function buildSrc() {
+      return 'https://w.soundcloud.com/player/?url=' +
+        encodeURIComponent(SOUNDCLOUD_URL) +
+        '&auto_play=true&hide_related=true&show_comments=false' +
+        '&show_user=true&show_reposts=false&visual=false&color=%23b03020';
+    }
+
+    btn.addEventListener('click', function () {
+      on = !on;
+      btn.classList.toggle('active', on);
+      panel.classList.toggle('on', on);
+      if (on) {
+        // Lazily create the iframe so nothing streams until the user asks.
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.allow = 'autoplay';
+          iframe.setAttribute('scrolling', 'no');
+          iframe.setAttribute('frameborder', 'no');
+          iframe.src = buildSrc();
+          panel.appendChild(iframe);
+        }
+      } else if (iframe) {
+        // Tear it down to stop playback.
+        panel.removeChild(iframe);
+        iframe = null;
       }
       canvasElement.focus();
     });
