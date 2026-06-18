@@ -103,13 +103,16 @@ Filters and FX stack — e.g. Red Hot + CRT.
 
 Quake's original soundtrack was composed by **Trent Reznor / Nine Inch Nails**,
 so dark industrial is the canonical vibe. The **🎧 Stream SoundCloud** button
-under the canvas toggles an embedded SoundCloud HTML5 player that streams the
-**dark industrial** tag feed (autoplay, continuous). It's lazy-loaded, so
-nothing streams until you click it, and toggling it off tears the player down to
-stop playback.
+under the canvas toggles an embedded SoundCloud HTML5 player that **overlays the
+bottom of the game window** (not a separate box outside it) and keeps streaming
+while you play — including in fullscreen, since it's just audio. It's
+lazy-loaded, so nothing streams until you click it, and toggling it off tears
+the player down to stop playback.
 
-To stream something else, change the `SOUNDCLOUD_URL` constant in
-`web/shell.html` to any SoundCloud track, playlist, user, or tag permalink.
+The default source is **Nine Inch Nails** (`soundcloud.com/nineinchnails`). The
+embed widget only resolves real SoundCloud resources — a **track, playlist, or
+user** permalink — *not* `/tags/` URLs. To stream something else, change the
+`SOUNDCLOUD_URL` constant in `web/shell.html` to any track/playlist/user URL.
 
 ## Deploying to GitHub Pages
 

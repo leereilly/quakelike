@@ -94,18 +94,30 @@
   button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
   #controls button.qbtn { margin: 2px; }
   #filters { display: inline-block; margin-left: 8px; }
-  /* SoundCloud streaming widget. Hidden until toggled on; Quake's original
-     soundtrack was Trent Reznor / NIN, so dark industrial is the canonical
-     vibe. */
+  /* SoundCloud streaming widget. Sits as an overlay inside the game stage
+     (over the canvas) rather than a box below it. Quake's original soundtrack
+     was Trent Reznor / NIN, so dark industrial is the canonical vibe. */
   #soundcloud {
-    width: 640px;
-    max-width: 95vw;
-    margin-top: 10px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
     display: none;
+    opacity: 0.88;
+    transition: opacity 0.15s;
   }
+  #soundcloud:hover { opacity: 1; }
   #soundcloud.on { display: block; }
-  #soundcloud iframe { width: 100%; height: 120px; border: 1px solid #222; }
-  #sc-hint { font-size: 11px; color: #888; margin: 4px 0 0; }
+  #soundcloud iframe { display: block; width: 100%; height: 110px; border: 0; border-top: 1px solid #b03020; }
+  #sc-hint {
+    font-size: 10px;
+    color: #c0c0c0;
+    background: rgba(0,0,0,0.7);
+    margin: 0;
+    padding: 2px 6px;
+    letter-spacing: 1px;
+  }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
      preserves its intrinsic ratio). */
@@ -139,6 +151,9 @@
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="crt-overlay"></div>
     <canvas id="ascii-overlay"></canvas>
+    <div id="soundcloud">
+      <p id="sc-hint">&#127911; DARK INDUSTRIAL &middot; streaming over your fragging (keeps playing in-game)</p>
+    </div>
   </div>
   <div id="status">Loading&hellip;</div>
   <progress hidden id="progress" max="100" value="0"></progress>
@@ -155,9 +170,6 @@
       <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
       <button class="qbtn" disabled id="soundcloud-btn" type="button">&#127911; Stream SoundCloud</button>
     </span>
-  </div>
-  <div id="soundcloud">
-    <p id="sc-hint">Streaming dark industrial from SoundCloud &middot; in keeping with Quake's NIN soundtrack</p>
   </div>
   <textarea id="output" readonly></textarea>
 </div>
@@ -378,9 +390,10 @@
 
   // ---- SoundCloud streaming (dark industrial, on theme with Quake's NIN OST) ----
   (function () {
-    // Swap this for any SoundCloud track / playlist / user / tag permalink.
-    // Defaults to the "dark industrial" tag feed.
-    var SOUNDCLOUD_URL = 'https://soundcloud.com/tags/dark%20industrial';
+    // Swap this for any SoundCloud track / playlist / user permalink. The embed
+    // widget only resolves real resources (NOT /tags/ URLs). Defaults to Nine
+    // Inch Nails -- the dark-industrial act that scored Quake.
+    var SOUNDCLOUD_URL = 'https://soundcloud.com/nineinchnails';
 
     var panel = document.getElementById('soundcloud');
     var btn = document.getElementById('soundcloud-btn');
