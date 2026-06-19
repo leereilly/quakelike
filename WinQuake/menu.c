@@ -1040,6 +1040,7 @@ again:
 // Background music streaming bridge (web port). Defined in web/snd_sdl.c.
 extern void	Web_ToggleMusic (void);
 extern int	Web_MusicState (void);
+extern void	Web_SetMusicVolume (float vol01);
 #endif
 
 #ifdef _WIN32
@@ -1108,6 +1109,9 @@ void M_AdjustSliders (int dir)
 		if (bgmvolume.value > 1)
 			bgmvolume.value = 1;
 		Cvar_SetValue ("bgmvolume", bgmvolume.value);
+#ifdef __EMSCRIPTEN__
+		Web_SetMusicVolume (bgmvolume.value);	// drive the SoundCloud stream
+#endif
 		break;
 	case 7:	// sfx volume
 		volume.value += dir * 0.1;
@@ -1146,6 +1150,7 @@ void M_AdjustSliders (int dir)
 #ifdef __EMSCRIPTEN__
 	case 12:	// stream music (web port: replaces Video Options)
 		Web_ToggleMusic ();
+		Web_SetMusicVolume (bgmvolume.value);	// start at the slider's level
 		break;
 #endif
 
@@ -1212,7 +1217,11 @@ void M_Options_Draw (void)
 	r = (sensitivity.value - 1)/10;
 	M_DrawSlider (220, 72, r);
 
+#ifdef __EMSCRIPTEN__
+	M_Print (16, 80, "          Music Volume");
+#else
 	M_Print (16, 80, "       CD Music Volume");
+#endif
 	r = bgmvolume.value;
 	M_DrawSlider (220, 80, r);
 

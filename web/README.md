@@ -120,6 +120,10 @@ the `Web_MusicStreamJS` `EM_JS` block in `web/snd_sdl.c`.
 > Browsers block autoplay until you interact with the page; toggling the menu
 > item counts as that interaction, so playback starts on toggle.
 
+The Options menu's volume slider (formerly "CD Music Volume", now **"Music
+Volume"**) drives the stream volume via the SoundCloud Widget API
+(`Web_SetMusicVolume` in `web/snd_sdl.c`).
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.
