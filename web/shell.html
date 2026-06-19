@@ -92,7 +92,34 @@
   button.qbtn:hover { background: #2a2a2a; border-color: #b03020; }
   button.qbtn:disabled { opacity: 0.4; cursor: default; }
   button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
+  /* Recording state for the GIF button: red, pulsing dot. */
+  button.qbtn.rec {
+    background: #b03020;
+    color: #fff;
+    border-color: #e05a30;
+    animation: rec-pulse 1s infinite steps(1, end);
+  }
+  @keyframes rec-pulse { 0%,50% { opacity: 1; } 51%,100% { opacity: 0.55; } }
   #controls button.qbtn { margin: 2px; }
+  #capture { display: inline-block; margin-left: 8px; }
+  /* Anchored toast confirming a saved capture. */
+  #capture-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: #1a1a1a;
+    color: #c0c0c0;
+    border: 1px solid #b03020;
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 3px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+    z-index: 10;
+  }
+  #capture-toast.show { opacity: 1; }
   #filters { display: inline-block; margin-left: 8px; }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
@@ -122,7 +149,7 @@
 <body>
 <div id="wrap">
   <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; enable music from the in-game Options menu</div>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; grab a Shot or record a GIF to share &middot; enable music from the in-game Options menu</div>
   <div id="stage">
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="crt-overlay"></div>
@@ -142,7 +169,12 @@
       <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
       <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
     </span>
+    <span id="capture">
+      <button class="qbtn" disabled id="shot-btn" type="button" title="Save a PNG screenshot">&#128247; Shot</button>
+      <button class="qbtn" disabled id="gif-btn" type="button" title="Record an animated GIF clip">&#127916; GIF</button>
+    </span>
   </div>
+  <div id="capture-toast"></div>
   <textarea id="output" readonly></textarea>
 </div>
 
@@ -358,6 +390,367 @@
       if (prevInit) prevInit();
       btn.disabled = false;
     };
+  })();
+
+  // ---- Screenshot + GIF capture (one-click shareable clips) ----
+  (function () {
+    var stage = document.getElementById('stage');
+    var asciiOverlay = document.getElementById('ascii-overlay');
+    var shotBtn = document.getElementById('shot-btn');
+    var gifBtn = document.getElementById('gif-btn');
+    var toast = document.getElementById('capture-toast');
+
+    var GIF_FPS = 12;          // frames per second captured for the GIF
+    var GIF_MAX_SEC = 8;       // auto-stop after this many seconds
+    var GIF_MAX_WIDTH = 320;   // downscale wide canvases to keep files small
+
+    var stream = null, video = null;
+    var scratch = document.createElement('canvas');
+    var sctx = scratch.getContext('2d', { willReadFrequently: true });
+
+    var captureSupported = typeof canvasElement.captureStream === 'function';
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(function () {
+        toast.classList.remove('show');
+      }, 2200);
+    }
+
+    // Lazily wire a MediaStream off the WebGL canvas. captureStream() reads the
+    // composited frame regardless of preserveDrawingBuffer, so it works where
+    // canvas.toDataURL() would come back blank.
+    function ensureStream() {
+      if (stream) {
+        return video.readyState >= 2 ? Promise.resolve()
+          : new Promise(function (r) { video.addEventListener('loadeddata', function () { r(); }, { once: true }); });
+      }
+      stream = canvasElement.captureStream(30);
+      video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      return video.play().then(function () {
+        if (video.videoWidth) return;
+        return new Promise(function (r) { video.addEventListener('loadeddata', function () { r(); }, { once: true }); });
+      });
+    }
+
+    // When ASCII mode is on, the visible frame lives on its own 2D canvas;
+    // otherwise we grab the game frame from the stream's <video>.
+    function asciiActive() { return stage.classList.contains('ascii'); }
+    function baseWidth() { return asciiActive() ? asciiOverlay.width : (video && video.videoWidth) || canvasElement.width; }
+    function baseHeight() { return asciiActive() ? asciiOverlay.height : (video && video.videoHeight) || canvasElement.height; }
+
+    // Composite the current frame (game/ASCII base + optional CRT styling) into
+    // a 2D context so screenshots and GIFs match what the player sees.
+    function compositeFrame(ctx, w, h) {
+      if (asciiActive()) {
+        ctx.drawImage(asciiOverlay, 0, 0, w, h);
+      } else {
+        ctx.drawImage(video, 0, 0, w, h);
+      }
+      if (stage.classList.contains('crt')) drawCrt(ctx, w, h);
+    }
+
+    // Approximate the CSS CRT overlay (scanlines + vignette) so it survives into
+    // the exported image/clip.
+    function drawCrt(ctx, w, h) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#000';
+      for (var y = 0; y < h; y += 3) ctx.fillRect(0, y + 1, w, 1);
+      var g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.62);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+
+    function timestamp() {
+      var d = new Date();
+      function p(n) { return ('0' + n).slice(-2); }
+      return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+        p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+    }
+
+    function download(blobOrUrl, name) {
+      var url = typeof blobOrUrl === 'string' ? blobOrUrl : URL.createObjectURL(blobOrUrl);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (typeof blobOrUrl !== 'string') setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    }
+
+    // ---- Screenshot ----
+    function takeShot() {
+      ensureStream().then(function () {
+        var w = baseWidth(), h = baseHeight();
+        scratch.width = w; scratch.height = h;
+        compositeFrame(sctx, w, h);
+        scratch.toBlob(function (blob) {
+          download(blob, 'quake-' + timestamp() + '.png');
+          showToast('Screenshot saved \u2713');
+        }, 'image/png');
+        canvasElement.focus();
+      });
+    }
+
+    // ---- GIF recording ----
+    var recording = false, frames = [], gifW = 0, gifH = 0, recTimer = 0, recStart = 0;
+
+    function startRecording() {
+      ensureStream().then(function () {
+        var bw = baseWidth(), bh = baseHeight();
+        var scale = Math.min(1, GIF_MAX_WIDTH / bw);
+        gifW = Math.max(1, Math.round(bw * scale));
+        gifH = Math.max(1, Math.round(bh * scale));
+        scratch.width = gifW; scratch.height = gifH;
+        frames = [];
+        recording = true;
+        recStart = Date.now();
+        gifBtn.classList.add('rec');
+        var interval = Math.round(1000 / GIF_FPS);
+        recTimer = setInterval(function () {
+          compositeFrame(sctx, gifW, gifH);
+          frames.push(sctx.getImageData(0, 0, gifW, gifH).data);
+          var secs = (Date.now() - recStart) / 1000;
+          gifBtn.innerHTML = '&#9210; ' + secs.toFixed(1) + 's';
+          if (secs >= GIF_MAX_SEC) stopRecording();
+        }, interval);
+      });
+    }
+
+    function stopRecording() {
+      if (!recording) return;
+      recording = false;
+      clearInterval(recTimer);
+      gifBtn.classList.remove('rec');
+      gifBtn.disabled = true;
+      gifBtn.innerHTML = 'Encoding\u2026';
+      // Defer so the button repaints before the (synchronous) encode.
+      setTimeout(function () {
+        try {
+          var bytes = encodeGif(frames, gifW, gifH, Math.round(100 / GIF_FPS));
+          download(new Blob([bytes], { type: 'image/gif' }), 'quake-' + timestamp() + '.gif');
+          showToast('GIF saved \u2713 (' + frames.length + ' frames)');
+        } catch (e) {
+          console.error('GIF encode failed:', e);
+          showToast('GIF encode failed \u2717');
+        }
+        frames = [];
+        gifBtn.disabled = false;
+        gifBtn.innerHTML = '&#127916; GIF';
+        canvasElement.focus();
+      }, 30);
+    }
+
+    shotBtn.addEventListener('click', takeShot);
+    gifBtn.addEventListener('click', function () {
+      if (recording) stopRecording(); else startRecording();
+    });
+
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      if (captureSupported) {
+        shotBtn.disabled = false;
+        gifBtn.disabled = false;
+      } else {
+        shotBtn.title = gifBtn.title = 'Capture not supported in this browser';
+      }
+    };
+
+    // ---- Minimal, dependency-free animated-GIF encoder (GIF89a + LZW) ----
+    // Quake's software renderer is 8-bit palettized, so a single 256-color
+    // global palette (built via median cut over sampled frames) reproduces the
+    // clip essentially loss-free while keeping files small.
+    function encodeGif(frameDatas, width, height, delayCs) {
+      var palette = buildPalette(frameDatas, width, height);
+      var indexed = frameDatas.map(function (data) {
+        return quantizeFrame(data, palette);
+      });
+
+      var out = [];
+      function byte(b) { out.push(b & 0xff); }
+      function word(w) { byte(w); byte(w >> 8); }
+      function str(s) { for (var i = 0; i < s.length; i++) byte(s.charCodeAt(i)); }
+
+      str('GIF89a');
+      word(width); word(height);
+      byte(0xf7);   // global color table, 256 entries, 8 bits/color
+      byte(0); byte(0);
+      for (var i = 0; i < 256; i++) {
+        var c = palette[i] || [0, 0, 0];
+        byte(c[0]); byte(c[1]); byte(c[2]);
+      }
+
+      // NETSCAPE2.0 application extension for infinite looping.
+      byte(0x21); byte(0xff); byte(11); str('NETSCAPE2.0');
+      byte(3); byte(1); word(0); byte(0);
+
+      for (var f = 0; f < indexed.length; f++) {
+        // Graphic control extension (frame delay).
+        byte(0x21); byte(0xf9); byte(4); byte(0); word(delayCs); byte(0); byte(0);
+        // Image descriptor.
+        byte(0x2c); word(0); word(0); word(width); word(height); byte(0);
+        byte(8); // LZW minimum code size
+        lzwEncode(indexed[f], 8, out);
+      }
+      byte(0x3b); // trailer
+      return new Uint8Array(out);
+    }
+
+    function buildPalette(frameDatas, width, height) {
+      // Sample pixels across all frames (cap the work) and median-cut to 256.
+      var samples = [];
+      var target = 16000;
+      var totalPx = frameDatas.length * width * height;
+      var step = Math.max(1, Math.floor(totalPx / target));
+      var counter = 0;
+      for (var f = 0; f < frameDatas.length; f++) {
+        var d = frameDatas[f];
+        for (var p = 0; p < d.length; p += 4) {
+          if (counter++ % step === 0) samples.push([d[p], d[p + 1], d[p + 2]]);
+        }
+      }
+      var pal = medianCut(samples, 256);
+      while (pal.length < 256) pal.push([0, 0, 0]);
+      return pal;
+    }
+
+    function medianCut(pixels, maxColors) {
+      if (!pixels.length) return [[0, 0, 0]];
+      var boxes = [makeBox(pixels)];
+      while (boxes.length < maxColors) {
+        // Split the box with the largest single-channel spread.
+        var idx = -1, best = -1;
+        for (var i = 0; i < boxes.length; i++) {
+          if (boxes[i].pixels.length < 2) continue;
+          if (boxes[i].range > best) { best = boxes[i].range; idx = i; }
+        }
+        if (idx < 0) break;
+        var box = boxes[idx];
+        var axis = box.axis;
+        box.pixels.sort(function (a, b) { return a[axis] - b[axis]; });
+        var mid = box.pixels.length >> 1;
+        boxes.splice(idx, 1,
+          makeBox(box.pixels.slice(0, mid)),
+          makeBox(box.pixels.slice(mid)));
+      }
+      return boxes.map(function (b) {
+        var r = 0, g = 0, bl = 0, n = b.pixels.length;
+        for (var i = 0; i < n; i++) { r += b.pixels[i][0]; g += b.pixels[i][1]; bl += b.pixels[i][2]; }
+        return [Math.round(r / n), Math.round(g / n), Math.round(bl / n)];
+      });
+    }
+
+    function makeBox(pixels) {
+      var min = [255, 255, 255], max = [0, 0, 0];
+      for (var i = 0; i < pixels.length; i++) {
+        for (var c = 0; c < 3; c++) {
+          var v = pixels[i][c];
+          if (v < min[c]) min[c] = v;
+          if (v > max[c]) max[c] = v;
+        }
+      }
+      var rr = max[0] - min[0], rg = max[1] - min[1], rb = max[2] - min[2];
+      var range = Math.max(rr, rg, rb);
+      var axis = range === rr ? 0 : (range === rg ? 1 : 2);
+      return { pixels: pixels, range: range, axis: axis };
+    }
+
+    function quantizeFrame(data, palette) {
+      var n = data.length / 4;
+      var out = new Uint8Array(n);
+      var cache = new Map();
+      for (var i = 0, j = 0; i < n; i++, j += 4) {
+        var key = (data[j] << 16) | (data[j + 1] << 8) | data[j + 2];
+        var idx = cache.get(key);
+        if (idx === undefined) {
+          idx = nearest(data[j], data[j + 1], data[j + 2], palette);
+          cache.set(key, idx);
+        }
+        out[i] = idx;
+      }
+      return out;
+    }
+
+    function nearest(r, g, b, palette) {
+      var best = 0, bestD = Infinity;
+      for (var i = 0; i < palette.length; i++) {
+        var c = palette[i];
+        var dr = r - c[0], dg = g - c[1], db = b - c[2];
+        var d = dr * dr + dg * dg + db * db;
+        if (d < bestD) { bestD = d; best = i; if (d === 0) break; }
+      }
+      return best;
+    }
+
+    // GIF-style variable-width LZW, emitted as 255-byte sub-blocks.
+    function lzwEncode(indices, minCodeSize, out) {
+      var clearCode = 1 << minCodeSize;
+      var eoiCode = clearCode + 1;
+      var codeSize = minCodeSize + 1;
+      var dict, nextCode;
+      function resetDict() {
+        dict = new Map();
+        for (var i = 0; i < clearCode; i++) dict.set('' + i, i);
+        nextCode = clearCode + 2;
+        codeSize = minCodeSize + 1;
+      }
+
+      var buf = 0, bits = 0;
+      var block = [];
+      function flushBlock() {
+        out.push(block.length);
+        for (var i = 0; i < block.length; i++) out.push(block[i]);
+        block = [];
+      }
+      function emit(code) {
+        buf |= code << bits;
+        bits += codeSize;
+        while (bits >= 8) {
+          block.push(buf & 0xff);
+          buf >>= 8;
+          bits -= 8;
+          if (block.length === 255) flushBlock();
+        }
+      }
+
+      resetDict();
+      emit(clearCode);
+      var prefix = '' + indices[0];
+      for (var k = 1; k < indices.length; k++) {
+        var c = indices[k];
+        var combined = prefix + ',' + c;
+        if (dict.has(combined)) {
+          prefix = combined;
+        } else {
+          emit(dict.get(prefix));
+          if (nextCode === 4096) {
+            emit(clearCode);
+            resetDict();
+          } else {
+            if (nextCode >= (1 << codeSize) && codeSize < 12) codeSize++;
+            dict.set(combined, nextCode++);
+          }
+          prefix = '' + c;
+        }
+      }
+      emit(dict.get(prefix));
+      emit(eoiCode);
+      if (bits > 0) block.push(buf & 0xff);
+      if (block.length) flushBlock();
+      out.push(0); // block terminator
+    }
   })();
 </script>
 {{{ SCRIPT }}}
