@@ -99,6 +99,31 @@ Two extra screen effects toggle from the **FX** buttons under the canvas:
 
 Filters and FX stack — e.g. Red Hot + CRT.
 
+## Stream music (dark industrial, in-game)
+
+Quake's original soundtrack was composed by **Trent Reznor / Nine Inch Nails**,
+so dark industrial is the canonical vibe. The web port adds a **Stream Music**
+toggle to the **in-game Options menu** (ESC → Options): it streams audio from a
+hidden, off-screen SoundCloud player — **no SoundCloud UI is shown in the game**,
+only the audio plays, and it keeps playing during gameplay and in fullscreen.
+
+It works by replacing the (unavailable) "Video Options" slot in the web build's
+Options menu with a checkbox. Toggling it calls a C→JS bridge
+(`Web_ToggleMusic` / `Web_MusicState` in `web/snd_sdl.c`) that creates or removes
+a hidden audio-only iframe.
+
+The default source is **Nine Inch Nails** (`soundcloud.com/nineinchnails`). The
+embed only resolves real SoundCloud resources — a **track, playlist, or user**
+permalink — *not* `/tags/` URLs. To stream something else, change the URL inside
+the `Web_MusicStreamJS` `EM_JS` block in `web/snd_sdl.c`.
+
+> Browsers block autoplay until you interact with the page; toggling the menu
+> item counts as that interaction, so playback starts on toggle.
+
+The Options menu's volume slider (formerly "CD Music Volume", now **"Music
+Volume"**) drives the stream volume via the SoundCloud Widget API
+(`Web_SetMusicVolume` in `web/snd_sdl.c`).
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.

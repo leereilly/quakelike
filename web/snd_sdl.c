@@ -189,3 +189,97 @@ nothing to push here.
 void SNDDMA_Submit (void)
 {
 }
+
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+// ---------------------------------------------------------------------------
+// Background music streaming.
+//
+// Streams audio from a hidden, off-screen SoundCloud player iframe. No UI is
+// shown in the game window -- only the audio plays. Toggled from the in-game
+// Options menu ("Stream Music"). Quake's original score was Trent Reznor /
+// Nine Inch Nails, so dark industrial is the canonical vibe; the default feed
+// is the NIN profile. The embed only resolves real SoundCloud resources (a
+// track, playlist, or user) -- not /tags/ URLs.
+// ---------------------------------------------------------------------------
+EM_JS(void, Web_MusicStreamJS, (int on), {
+	var id = 'qk-music-stream';
+	var el = document.getElementById(id);
+	if (on) {
+		if (!el) {
+			el = document.createElement('iframe');
+			el.id = id;
+			el.allow = 'autoplay';
+			// Kept in the DOM but hidden off-screen; the audio still plays.
+			el.style.cssText = 'position:absolute;width:1px;height:1px;' +
+				'left:-9999px;top:-9999px;border:0;visibility:hidden;';
+			el.src = 'https://w.soundcloud.com/player/?url=' +
+				encodeURIComponent('https://soundcloud.com/nineinchnails') +
+				'&auto_play=true&hide_related=true&show_comments=false&visual=false';
+			document.body.appendChild(el);
+
+			// Hook the SoundCloud Widget API so the in-game Music Volume slider
+			// can drive playback volume. The desired level is stashed on a
+			// global and (re)applied once the widget signals READY.
+			var bind = function () {
+				if (!window.SC || !window.SC.Widget)
+					return;
+				var w = SC.Widget(el);
+				window.__qkWidget = w;
+				w.bind(SC.Widget.Events.READY, function () {
+					var v = (window.__qkMusicVol == null) ? 100 : window.__qkMusicVol;
+					w.setVolume(v);
+				});
+			};
+			if (window.SC && window.SC.Widget) {
+				bind();
+			} else if (!document.getElementById('qk-sc-api')) {
+				var s = document.createElement('script');
+				s.id = 'qk-sc-api';
+				s.src = 'https://w.soundcloud.com/player/api.js';
+				s.onload = bind;
+				document.body.appendChild(s);
+			} else {
+				var tries = 0;
+				var iv = setInterval(function () {
+					if (window.SC && window.SC.Widget) { clearInterval(iv); bind(); }
+					else if (++tries > 50) { clearInterval(iv); }
+				}, 100);
+			}
+		}
+	} else if (el && el.parentNode) {
+		el.parentNode.removeChild(el);
+		window.__qkWidget = null;
+	}
+});
+
+EM_JS(void, Web_SetMusicVolumeJS, (int vol), {
+	window.__qkMusicVol = vol;
+	if (window.__qkWidget && window.__qkWidget.setVolume)
+		window.__qkWidget.setVolume(vol);
+});
+
+static int web_music_on = 0;
+
+void Web_ToggleMusic (void)
+{
+	web_music_on = !web_music_on;
+	Web_MusicStreamJS (web_music_on);
+}
+
+int Web_MusicState (void)
+{
+	return web_music_on;
+}
+
+// vol01 is the engine's 0..1 music level; the widget wants 0..100.
+void Web_SetMusicVolume (float vol01)
+{
+	int v = (int)(vol01 * 100.0f + 0.5f);
+	if (v < 0)	v = 0;
+	if (v > 100)	v = 100;
+	Web_SetMusicVolumeJS (v);
+}
+#endif

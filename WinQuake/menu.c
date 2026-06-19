@@ -1036,6 +1036,13 @@ again:
 //=============================================================================
 /* OPTIONS MENU */
 
+#ifdef __EMSCRIPTEN__
+// Background music streaming bridge (web port). Defined in web/snd_sdl.c.
+extern void	Web_ToggleMusic (void);
+extern int	Web_MusicState (void);
+extern void	Web_SetMusicVolume (float vol01);
+#endif
+
 #ifdef _WIN32
 #define	OPTIONS_ITEMS	14
 #else
@@ -1102,6 +1109,9 @@ void M_AdjustSliders (int dir)
 		if (bgmvolume.value > 1)
 			bgmvolume.value = 1;
 		Cvar_SetValue ("bgmvolume", bgmvolume.value);
+#ifdef __EMSCRIPTEN__
+		Web_SetMusicVolume (bgmvolume.value);	// drive the SoundCloud stream
+#endif
 		break;
 	case 7:	// sfx volume
 		volume.value += dir * 0.1;
@@ -1136,6 +1146,13 @@ void M_AdjustSliders (int dir)
 	case 11:	// lookstrafe
 		Cvar_SetValue ("lookstrafe", !lookstrafe.value);
 		break;
+
+#ifdef __EMSCRIPTEN__
+	case 12:	// stream music (web port: replaces Video Options)
+		Web_ToggleMusic ();
+		Web_SetMusicVolume (bgmvolume.value);	// start at the slider's level
+		break;
+#endif
 
 #ifdef _WIN32
 	case 13:	// _windowed_mouse
@@ -1200,7 +1217,11 @@ void M_Options_Draw (void)
 	r = (sensitivity.value - 1)/10;
 	M_DrawSlider (220, 72, r);
 
+#ifdef __EMSCRIPTEN__
+	M_Print (16, 80, "          Music Volume");
+#else
 	M_Print (16, 80, "       CD Music Volume");
+#endif
 	r = bgmvolume.value;
 	M_DrawSlider (220, 80, r);
 
@@ -1220,8 +1241,14 @@ void M_Options_Draw (void)
 	M_Print (16, 120, "            Lookstrafe");
 	M_DrawCheckbox (220, 120, lookstrafe.value);
 
+#ifndef __EMSCRIPTEN__
 	if (vid_menudrawfn)
 		M_Print (16, 128, "         Video Options");
+#else
+	// Web port has no video options menu; reuse the slot for music streaming.
+	M_Print (16, 128, "          Stream Music");
+	M_DrawCheckbox (220, 128, Web_MusicState ());
+#endif
 
 #ifdef _WIN32
 	if (modestate == MS_WINDOWED)
@@ -1259,7 +1286,11 @@ void M_Options_Key (int k)
 			Cbuf_AddText ("exec default.cfg\n");
 			break;
 		case 12:
+#ifdef __EMSCRIPTEN__
+			M_AdjustSliders (1);	// toggle Stream Music
+#else
 			M_Menu_Video_f ();
+#endif
 			break;
 		default:
 			M_AdjustSliders (1);
@@ -1290,6 +1321,7 @@ void M_Options_Key (int k)
 		break;
 	}
 
+#ifndef __EMSCRIPTEN__
 	if (options_cursor == 12 && vid_menudrawfn == NULL)
 	{
 		if (k == K_UPARROW)
@@ -1297,6 +1329,7 @@ void M_Options_Key (int k)
 		else
 			options_cursor = 0;
 	}
+#endif
 
 #ifdef _WIN32
 	if ((options_cursor == 13) && (modestate != MS_WINDOWED))
