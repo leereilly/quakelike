@@ -99,6 +99,32 @@ Two extra screen effects toggle from the **FX** buttons under the canvas:
 
 Filters and FX stack — e.g. Red Hot + CRT.
 
+## Capture & share (Shot / GIF)
+
+Two buttons under the canvas turn the live game into shareable media — perfect
+for demos and social clips:
+
+- **📷 Shot** — saves a PNG screenshot of the current frame.
+- **🎞 GIF** — click to start recording, click again to stop (auto-stops after
+  8 seconds), and an animated GIF downloads automatically. A small toast
+  confirms each save.
+
+Both capture **whatever you currently see**, including the active filter, the
+ASCII view, and the CRT overlay (scanlines + vignette are re-drawn into the
+exported pixels). GIFs are downscaled to ≤320px wide and recorded at 12 fps to
+keep files small and instantly shareable.
+
+It's implemented entirely in `web/shell.html` with no extra dependencies or
+build step:
+
+- Frames are pulled off the WebGL canvas via `canvas.captureStream()`, which
+  works regardless of `preserveDrawingBuffer` (where `canvas.toDataURL()` would
+  return blank).
+- A compact, self-contained **GIF89a encoder** (median-cut palette + LZW)
+  produces a looping animated GIF in the browser. Because Quake's software
+  renderer is 8-bit palettized, a single 256-color global palette reproduces the
+  clip essentially loss-free.
+
 ## Deploying to GitHub Pages
 
 The workflow at `.github/workflows/pages.yml` builds and deploys automatically.
