@@ -94,30 +94,6 @@
   button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
   #controls button.qbtn { margin: 2px; }
   #filters { display: inline-block; margin-left: 8px; }
-  /* SoundCloud streaming widget. Sits as an overlay inside the game stage
-     (over the canvas) rather than a box below it. Quake's original soundtrack
-     was Trent Reznor / NIN, so dark industrial is the canonical vibe. */
-  #soundcloud {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 3;
-    display: none;
-    opacity: 0.88;
-    transition: opacity 0.15s;
-  }
-  #soundcloud:hover { opacity: 1; }
-  #soundcloud.on { display: block; }
-  #soundcloud iframe { display: block; width: 100%; height: 110px; border: 0; border-top: 1px solid #b03020; }
-  #sc-hint {
-    font-size: 10px;
-    color: #c0c0c0;
-    background: rgba(0,0,0,0.7);
-    margin: 0;
-    padding: 2px 6px;
-    letter-spacing: 1px;
-  }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
      preserves its intrinsic ratio). */
@@ -146,14 +122,11 @@
 <body>
 <div id="wrap">
   <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; stream dark industrial from SoundCloud</div>
+  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; enable music from the in-game Options menu</div>
   <div id="stage">
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="crt-overlay"></div>
     <canvas id="ascii-overlay"></canvas>
-    <div id="soundcloud">
-      <p id="sc-hint">&#127911; DARK INDUSTRIAL &middot; streaming over your fragging (keeps playing in-game)</p>
-    </div>
   </div>
   <div id="status">Loading&hellip;</div>
   <progress hidden id="progress" max="100" value="0"></progress>
@@ -168,7 +141,6 @@
     <span id="fx">
       <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
       <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
-      <button class="qbtn" disabled id="soundcloud-btn" type="button">&#127911; Stream SoundCloud</button>
     </span>
   </div>
   <textarea id="output" readonly></textarea>
@@ -377,54 +349,6 @@
       } else if (rafId) {
         cancelAnimationFrame(rafId);
         rafId = 0;
-      }
-      canvasElement.focus();
-    });
-
-    var prevInit = Module.onRuntimeInitialized;
-    Module.onRuntimeInitialized = function () {
-      if (prevInit) prevInit();
-      btn.disabled = false;
-    };
-  })();
-
-  // ---- SoundCloud streaming (dark industrial, on theme with Quake's NIN OST) ----
-  (function () {
-    // Swap this for any SoundCloud track / playlist / user permalink. The embed
-    // widget only resolves real resources (NOT /tags/ URLs). Defaults to Nine
-    // Inch Nails -- the dark-industrial act that scored Quake.
-    var SOUNDCLOUD_URL = 'https://soundcloud.com/nineinchnails';
-
-    var panel = document.getElementById('soundcloud');
-    var btn = document.getElementById('soundcloud-btn');
-    var iframe = null;
-    var on = false;
-
-    function buildSrc() {
-      return 'https://w.soundcloud.com/player/?url=' +
-        encodeURIComponent(SOUNDCLOUD_URL) +
-        '&auto_play=true&hide_related=true&show_comments=false' +
-        '&show_user=true&show_reposts=false&visual=false&color=%23b03020';
-    }
-
-    btn.addEventListener('click', function () {
-      on = !on;
-      btn.classList.toggle('active', on);
-      panel.classList.toggle('on', on);
-      if (on) {
-        // Lazily create the iframe so nothing streams until the user asks.
-        if (!iframe) {
-          iframe = document.createElement('iframe');
-          iframe.allow = 'autoplay';
-          iframe.setAttribute('scrolling', 'no');
-          iframe.setAttribute('frameborder', 'no');
-          iframe.src = buildSrc();
-          panel.appendChild(iframe);
-        }
-      } else if (iframe) {
-        // Tear it down to stop playback.
-        panel.removeChild(iframe);
-        iframe = null;
       }
       canvasElement.focus();
     });

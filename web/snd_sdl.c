@@ -189,3 +189,52 @@ nothing to push here.
 void SNDDMA_Submit (void)
 {
 }
+
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+// ---------------------------------------------------------------------------
+// Background music streaming.
+//
+// Streams audio from a hidden, off-screen SoundCloud player iframe. No UI is
+// shown in the game window -- only the audio plays. Toggled from the in-game
+// Options menu ("Stream Music"). Quake's original score was Trent Reznor /
+// Nine Inch Nails, so dark industrial is the canonical vibe; the default feed
+// is the NIN profile. The embed only resolves real SoundCloud resources (a
+// track, playlist, or user) -- not /tags/ URLs.
+// ---------------------------------------------------------------------------
+EM_JS(void, Web_MusicStreamJS, (int on), {
+	var id = 'qk-music-stream';
+	var el = document.getElementById(id);
+	if (on) {
+		if (!el) {
+			el = document.createElement('iframe');
+			el.id = id;
+			el.allow = 'autoplay';
+			// Kept in the DOM but hidden off-screen; the audio still plays.
+			el.style.cssText = 'position:absolute;width:1px;height:1px;' +
+				'left:-9999px;top:-9999px;border:0;visibility:hidden;';
+			el.src = 'https://w.soundcloud.com/player/?url=' +
+				encodeURIComponent('https://soundcloud.com/nineinchnails') +
+				'&auto_play=true&hide_related=true&show_comments=false&visual=false';
+			document.body.appendChild(el);
+		}
+	} else if (el && el.parentNode) {
+		el.parentNode.removeChild(el);
+	}
+});
+
+static int web_music_on = 0;
+
+void Web_ToggleMusic (void)
+{
+	web_music_on = !web_music_on;
+	Web_MusicStreamJS (web_music_on);
+}
+
+int Web_MusicState (void)
+{
+	return web_music_on;
+}
+#endif

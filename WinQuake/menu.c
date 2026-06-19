@@ -1036,6 +1036,12 @@ again:
 //=============================================================================
 /* OPTIONS MENU */
 
+#ifdef __EMSCRIPTEN__
+// Background music streaming bridge (web port). Defined in web/snd_sdl.c.
+extern void	Web_ToggleMusic (void);
+extern int	Web_MusicState (void);
+#endif
+
 #ifdef _WIN32
 #define	OPTIONS_ITEMS	14
 #else
@@ -1137,6 +1143,12 @@ void M_AdjustSliders (int dir)
 		Cvar_SetValue ("lookstrafe", !lookstrafe.value);
 		break;
 
+#ifdef __EMSCRIPTEN__
+	case 12:	// stream music (web port: replaces Video Options)
+		Web_ToggleMusic ();
+		break;
+#endif
+
 #ifdef _WIN32
 	case 13:	// _windowed_mouse
 		Cvar_SetValue ("_windowed_mouse", !_windowed_mouse.value);
@@ -1220,8 +1232,14 @@ void M_Options_Draw (void)
 	M_Print (16, 120, "            Lookstrafe");
 	M_DrawCheckbox (220, 120, lookstrafe.value);
 
+#ifndef __EMSCRIPTEN__
 	if (vid_menudrawfn)
 		M_Print (16, 128, "         Video Options");
+#else
+	// Web port has no video options menu; reuse the slot for music streaming.
+	M_Print (16, 128, "          Stream Music");
+	M_DrawCheckbox (220, 128, Web_MusicState ());
+#endif
 
 #ifdef _WIN32
 	if (modestate == MS_WINDOWED)
@@ -1259,7 +1277,11 @@ void M_Options_Key (int k)
 			Cbuf_AddText ("exec default.cfg\n");
 			break;
 		case 12:
+#ifdef __EMSCRIPTEN__
+			M_AdjustSliders (1);	// toggle Stream Music
+#else
 			M_Menu_Video_f ();
+#endif
 			break;
 		default:
 			M_AdjustSliders (1);
@@ -1290,6 +1312,7 @@ void M_Options_Key (int k)
 		break;
 	}
 
+#ifndef __EMSCRIPTEN__
 	if (options_cursor == 12 && vid_menudrawfn == NULL)
 	{
 		if (k == K_UPARROW)
@@ -1297,6 +1320,7 @@ void M_Options_Key (int k)
 		else
 			options_cursor = 0;
 	}
+#endif
 
 #ifdef _WIN32
 	if ((options_cursor == 13) && (modestate != MS_WINDOWED))

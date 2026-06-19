@@ -99,20 +99,26 @@ Two extra screen effects toggle from the **FX** buttons under the canvas:
 
 Filters and FX stack — e.g. Red Hot + CRT.
 
-## Stream SoundCloud (dark industrial)
+## Stream music (dark industrial, in-game)
 
 Quake's original soundtrack was composed by **Trent Reznor / Nine Inch Nails**,
-so dark industrial is the canonical vibe. The **🎧 Stream SoundCloud** button
-under the canvas toggles an embedded SoundCloud HTML5 player that **overlays the
-bottom of the game window** (not a separate box outside it) and keeps streaming
-while you play — including in fullscreen, since it's just audio. It's
-lazy-loaded, so nothing streams until you click it, and toggling it off tears
-the player down to stop playback.
+so dark industrial is the canonical vibe. The web port adds a **Stream Music**
+toggle to the **in-game Options menu** (ESC → Options): it streams audio from a
+hidden, off-screen SoundCloud player — **no SoundCloud UI is shown in the game**,
+only the audio plays, and it keeps playing during gameplay and in fullscreen.
+
+It works by replacing the (unavailable) "Video Options" slot in the web build's
+Options menu with a checkbox. Toggling it calls a C→JS bridge
+(`Web_ToggleMusic` / `Web_MusicState` in `web/snd_sdl.c`) that creates or removes
+a hidden audio-only iframe.
 
 The default source is **Nine Inch Nails** (`soundcloud.com/nineinchnails`). The
-embed widget only resolves real SoundCloud resources — a **track, playlist, or
-user** permalink — *not* `/tags/` URLs. To stream something else, change the
-`SOUNDCLOUD_URL` constant in `web/shell.html` to any track/playlist/user URL.
+embed only resolves real SoundCloud resources — a **track, playlist, or user**
+permalink — *not* `/tags/` URLs. To stream something else, change the URL inside
+the `Web_MusicStreamJS` `EM_JS` block in `web/snd_sdl.c`.
+
+> Browsers block autoplay until you interact with the page; toggling the menu
+> item counts as that interaction, so playback starts on toggle.
 
 ## Deploying to GitHub Pages
 
