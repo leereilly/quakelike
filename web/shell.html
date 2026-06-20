@@ -3,42 +3,122 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
 <title>Quake (WebAssembly)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --bg: #000000;
+    --panel: #0a0a0a;
+    --panel-2: #111111;
+    --elevated: #161616;
+    --border: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.20);
+    --fg: #ededed;
+    --fg-dim: #a1a1a1;
+    --fg-faint: #6b6b6b;
+    --accent: #e5484d;
+    --accent-hover: #f2555a;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: 'Geist Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
   html, body {
     margin: 0;
     padding: 0;
-    background: #000;
-    color: #c0c0c0;
-    font-family: monospace;
-    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100%;
+  }
+  body {
+    background-image:
+      radial-gradient(60rem 40rem at 50% -10rem, rgba(229, 72, 77, 0.08), transparent 70%);
+    background-repeat: no-repeat;
   }
   #wrap {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    min-height: 100%;
-    box-sizing: border-box;
-    padding: 16px;
+    align-items: stretch;
+    gap: 20px;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 20px 64px;
   }
+  /* Header / wordmark */
+  header { display: flex; align-items: center; gap: 12px; }
   h1 {
-    font-size: 18px;
-    letter-spacing: 4px;
-    color: #b03020;
-    margin: 8px 0 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--fg);
+    margin: 0;
   }
-  #hint { font-size: 12px; color: #888; margin-bottom: 12px; }
-  /* The stage wraps the canvas so post-process overlays can sit on top of it
-     at the exact same size. */
-  #stage { position: relative; display: inline-block; line-height: 0; }
+  h1 .mark {
+    display: inline-block;
+    width: 12px;
+    height: 22px;
+    background: var(--accent);
+    border-radius: 2px;
+    box-shadow: 0 0 18px rgba(229, 72, 77, 0.6);
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-2);
+  }
+  #hint {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--fg-dim);
+    margin: 0;
+    max-width: 64ch;
+  }
+  /* Card groups the framed screen with its status/progress. Transparent so the
+     border lives on #stage and hugs the screen with no padding. */
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  /* The stage is the frame: it wraps the canvas tightly (no padding) so the
+     border is even on all sides, and post-process overlays sit on top of it at
+     the exact same size. */
+  #stage {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
+    max-width: 100%;
+  }
   canvas.emscripten {
-    border: 1px solid #333;
+    display: block;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
     background: #000;
     width: 640px;
     height: 400px;
-    max-width: 95vw;
+    max-width: 100%;
   }
   /* CRT scanline + vignette overlay (pure CSS, toggled on #stage). */
   #crt-overlay {
@@ -74,53 +154,103 @@
   }
   #stage.ascii #ascii-overlay { display: block; }
   #status {
-    margin-top: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
     font-size: 12px;
-    min-height: 16px;
+    color: var(--fg-dim);
+    min-height: 18px;
   }
-  #progress { width: 320px; max-width: 90vw; height: 6px; }
-  #controls { margin-top: 10px; }
+  #progress {
+    width: 320px;
+    max-width: 90%;
+    height: 6px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--elevated);
+  }
+  #progress::-webkit-progress-bar { background: var(--elevated); border-radius: 999px; }
+  #progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
+  #progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+  /* Toolbar of control groups */
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 18px 28px;
+    width: 100%;
+  }
+  .group { display: flex; flex-direction: column; gap: 8px; }
+  .group-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    padding-left: 2px;
+  }
+  .group-row { display: flex; flex-wrap: wrap; gap: 6px; }
   button.qbtn {
-    background: #1a1a1a;
-    color: #c0c0c0;
-    border: 1px solid #444;
-    font-family: monospace;
-    font-size: 12px;
-    padding: 5px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 14px;
+    background: var(--panel-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
     cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, transform .04s ease;
   }
-  button.qbtn:hover { background: #2a2a2a; border-color: #b03020; }
-  button.qbtn:disabled { opacity: 0.4; cursor: default; }
-  button.qbtn.active { background: #b03020; color: #fff; border-color: #e05a30; }
-  /* Recording state for the GIF button: red, pulsing dot. */
-  button.qbtn.rec {
-    background: #b03020;
+  button.qbtn:hover:not(:disabled) { background: var(--elevated); border-color: var(--border-strong); }
+  button.qbtn:active:not(:disabled) { transform: translateY(1px); }
+  button.qbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.qbtn.active {
+    background: var(--accent);
     color: #fff;
-    border-color: #e05a30;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(229, 72, 77, 0.25);
+  }
+  button.qbtn.active:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  /* Recording state for the GIF button: red, pulsing. */
+  button.qbtn.rec {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
     animation: rec-pulse 1s infinite steps(1, end);
   }
   @keyframes rec-pulse { 0%,50% { opacity: 1; } 51%,100% { opacity: 0.55; } }
-  #controls button.qbtn { margin: 2px; }
-  #capture { display: inline-block; margin-left: 8px; }
+  #filters, #fx, #capture { display: flex; flex-wrap: wrap; gap: 6px; }
   /* Anchored toast confirming a saved capture. */
   #capture-toast {
     position: fixed;
     left: 50%;
-    bottom: 24px;
-    transform: translateX(-50%);
-    background: #1a1a1a;
-    color: #c0c0c0;
-    border: 1px solid #b03020;
-    padding: 8px 16px;
+    bottom: 28px;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--elevated);
+    color: var(--fg);
+    border: 1px solid var(--border-strong);
+    padding: 10px 16px;
+    font-family: var(--mono);
     font-size: 12px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.25s;
+    transition: opacity .25s ease, transform .25s ease;
     z-index: 10;
   }
-  #capture-toast.show { opacity: 1; }
-  #filters { display: inline-block; margin-left: 8px; }
+  #capture-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   /* When the canvas is the fullscreen element, fill the screen while keeping
      the 8:5 aspect ratio (canvas is a replaced element, so one auto dimension
      preserves its intrinsic ratio). */
@@ -131,51 +261,85 @@
     max-height: 100vh;
     margin: auto;
     border: none;
+    border-radius: 0;
     background: #000;
   }
+  .console { display: flex; flex-direction: column; gap: 8px; }
+  .console-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+  }
   #output {
-    width: 640px;
-    max-width: 95vw;
-    height: 120px;
-    margin-top: 10px;
-    background: #0a0a0a;
-    color: #6a6;
-    border: 1px solid #222;
-    font-size: 11px;
+    width: 100%;
+    height: 140px;
+    background: var(--panel);
+    color: #7ee787;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 12px 14px;
     resize: vertical;
   }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <h1>QUAKE</h1>
-  <div id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; grab a Shot or record a GIF to share &middot; enable music from the in-game Options menu</div>
-  <div id="stage">
-    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
-    <div id="crt-overlay"></div>
-    <canvas id="ascii-overlay"></canvas>
+  <header>
+    <h1><span class="mark"></span>QUAKE</h1>
+    <span class="badge">WebAssembly</span>
+  </header>
+  <p id="hint">Click the canvas to capture the mouse &middot; ESC for menu &middot; ` for console &middot; double-click for fullscreen &middot; try the filters &amp; FX below (Red Hot, Synthwave, Matrix, CRT, ASCII) &middot; grab a Shot or record a GIF to share &middot; enable music from the in-game Options menu</p>
+  <div class="card">
+    <div id="stage">
+      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+      <div id="crt-overlay"></div>
+      <canvas id="ascii-overlay"></canvas>
+    </div>
+    <div id="status">Loading&hellip;</div>
+    <progress hidden id="progress" max="100" value="0"></progress>
   </div>
-  <div id="status">Loading&hellip;</div>
-  <progress hidden id="progress" max="100" value="0"></progress>
   <div id="controls">
-    <button class="qbtn" disabled id="fullscreen-btn" type="button">Fullscreen</button>
-    <span id="filters">
-      <button class="qbtn filter-btn" disabled type="button" data-filter="0">Normal</button>
-      <button class="qbtn filter-btn" disabled type="button" data-filter="1">&#128293; Red Hot</button>
-      <button class="qbtn filter-btn" disabled type="button" data-filter="2">&#127750; Synthwave</button>
-      <button class="qbtn filter-btn" disabled type="button" data-filter="3">&#129001; Matrix</button>
-    </span>
-    <span id="fx">
-      <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
-      <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
-    </span>
-    <span id="capture">
-      <button class="qbtn" disabled id="shot-btn" type="button" title="Save a PNG screenshot">&#128247; Shot</button>
-      <button class="qbtn" disabled id="gif-btn" type="button" title="Record an animated GIF clip">&#127916; GIF</button>
-    </span>
+    <div class="group">
+      <span class="group-label">Display</span>
+      <div class="group-row">
+        <button class="qbtn" disabled id="fullscreen-btn" type="button">Fullscreen</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="group-label">Filters</span>
+      <span id="filters">
+        <button class="qbtn filter-btn" disabled type="button" data-filter="0">Normal</button>
+        <button class="qbtn filter-btn" disabled type="button" data-filter="1">&#128293; Red Hot</button>
+        <button class="qbtn filter-btn" disabled type="button" data-filter="2">&#127750; Synthwave</button>
+        <button class="qbtn filter-btn" disabled type="button" data-filter="3">&#129001; Matrix</button>
+      </span>
+    </div>
+    <div class="group">
+      <span class="group-label">Effects</span>
+      <span id="fx">
+        <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
+        <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
+      </span>
+    </div>
+    <div class="group">
+      <span class="group-label">Capture</span>
+      <span id="capture">
+        <button class="qbtn" disabled id="shot-btn" type="button" title="Save a PNG screenshot">&#128247; Shot</button>
+        <button class="qbtn" disabled id="gif-btn" type="button" title="Record an animated GIF clip">&#127916; GIF</button>
+      </span>
+    </div>
   </div>
   <div id="capture-toast"></div>
-  <textarea id="output" readonly></textarea>
+  <div class="console">
+    <span class="console-label">Console output</span>
+    <textarea id="output" readonly></textarea>
+  </div>
 </div>
 
 <script type="text/javascript">

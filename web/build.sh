@@ -79,15 +79,41 @@ LDFLAGS=(
 	--shell-file "$SCRIPT_DIR/shell.html"
 )
 
+# --- fetch shareware game data if missing ----------------------------------
+# We never commit id Software data. If web/id1/pak0.pak is absent, download the
+# freely-redistributable shareware pak so local builds are playable out of the
+# box. Set QUAKE_PAK_URL to override the source, or SKIP_PAK_DOWNLOAD=1 to skip.
+PAK_URL="${QUAKE_PAK_URL:-https://archive.org/download/quake-shareware-pak/PAK0.PAK}"
+if [ ! -f "$SCRIPT_DIR/id1/pak0.pak" ] && [ "${SKIP_PAK_DOWNLOAD:-0}" != "1" ]; then
+	echo "web/id1/pak0.pak not found -- downloading shareware pak ..."
+	mkdir -p "$SCRIPT_DIR/id1"
+	if command -v curl >/dev/null 2>&1; then
+		curl -fSL --retry 3 -o "$SCRIPT_DIR/id1/pak0.pak" "$PAK_URL"
+	elif command -v wget >/dev/null 2>&1; then
+		wget -O "$SCRIPT_DIR/id1/pak0.pak" "$PAK_URL"
+	else
+		echo "error: neither curl nor wget found; cannot download pak0.pak" >&2
+		exit 1
+	fi
+	# A valid Quake pak begins with the magic bytes "PACK".
+	if [ "$(head -c 4 "$SCRIPT_DIR/id1/pak0.pak")" != "PACK" ]; then
+		echo "error: downloaded pak0.pak is not a valid PACK file" >&2
+		rm -f "$SCRIPT_DIR/id1/pak0.pak"
+		exit 1
+	fi
+	echo "Downloaded shareware pak0.pak to web/id1/."
+fi
+
 # --- preload game data if present ------------------------------------------
-# We never commit id Software data. If web/id1/ exists (e.g. populated by CI or
-# locally), preload it so /id1/pak0.pak is available in the virtual filesystem.
+# If web/id1/ exists (downloaded above, or populated by CI/locally), preload it
+# so /id1/pak0.pak is available in the virtual filesystem.
 if [ -d "$SCRIPT_DIR/id1" ] && [ -n "$(ls -A "$SCRIPT_DIR/id1" 2>/dev/null)" ]; then
 	echo "Preloading game data from web/id1/ ..."
 	LDFLAGS+=(--preload-file "$SCRIPT_DIR/id1@/id1")
 else
 	echo "WARNING: web/id1/ is empty or missing -- the build will not be playable."
-	echo "         Add id1/pak0.pak (e.g. the shareware pak) before/at deploy time."
+	echo "         Set SKIP_PAK_DOWNLOAD=0 (the default) to auto-fetch the shareware"
+	echo "         pak, or add id1/pak0.pak yourself before/at deploy time."
 fi
 
 echo "Compiling ${#SRC_FILES[@]} translation units ..."
