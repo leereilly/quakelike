@@ -5,9 +5,7 @@
 # Quakelike
 
 This is id Software's original Quake source code, brought back to life in the
-browser. The portable C engine (`WinQuake`) is compiled to WebAssembly with
-Emscripten, so the 1996 software renderer runs at full speed on a modern web
-page. The GitHub Copilot App helped me hack a few things...
+browser... with a few additions (thanks GitHub Copilot)!
 
 <div align="center">
   <img src="screenshot.webp">
@@ -18,23 +16,26 @@ page. The GitHub Copilot App helped me hack a few things...
 - **Quake, in your browser.** The original C
    engine is compiled to WebAssembly and runs on GitHub Pages. Build grabs the
    shareware `pak0.pak`, deploy boots, and you're fragging.
-- **Procedural dungeon runs.** Clear a level, jump through the slipgate, and
+
+- **Procedurally generated levels.** Clear a level, jump through the slipgate, and
    get a fresh layout with new walls, textures, monsters, and door logic. Every
    run feels like a new bad neighborhood.
+
 - **Live palette FX.** The renderer stays true to Quake's 8-bit pipeline, then
    remaps colors in real time for Red Hot, Synthwave, and Matrix looks, plus CRT
    scanlines and full ASCII mode synced to the active palette.
+
 - **One-click evidence capture.** Hit Shot for PNG or GIF for a short animated
    clip, encoded right in the browser.
    dependencies.
+
 - **SoundCloud integration.** Flip on a music stream in game while you roam,
    fight, and panic in narrow hallways.
 - **Translation support.** UI and messaging can be localized so the same panic
    works in more than one language.
+
 - **Copilot in the console.** Built-in assistant hooks for experiments,
    debugging, and faster iteration while you tune the web port. Press <kbd>`</kbd> to open the Quake console and type `copilot`.
-
-![quakelike](quakelike.webp)
 
 ## Play and build
 
