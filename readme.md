@@ -9,7 +9,11 @@ browser. The portable C engine (`WinQuake`) is compiled to WebAssembly with
 Emscripten, so the 1996 software renderer runs at full speed on a modern web
 page. The GitHub Copilot App helped me hack a few things...
 
-The eight features I'd sell over a fake late-night game radio ad:
+<div align="center">
+  <img src="screenshot.webp">
+</div>
+
+## Features
 
 - **Quake, in your browser.** The original C
    engine is compiled to WebAssembly and runs on GitHub Pages. Build grabs the
