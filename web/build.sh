@@ -123,8 +123,15 @@ emcc "${CFLAGS[@]}" "${SRC_FILES[@]}" "${LDFLAGS[@]}" -o "$OUT_DIR/index.html"
 touch "$OUT_DIR/.nojekyll"
 
 # Copy static share assets (social-card image for OpenGraph/Twitter unfurls).
-if [ -f "$SCRIPT_DIR/og-image.png" ]; then
-	cp "$SCRIPT_DIR/og-image.png" "$OUT_DIR/og-image.png"
+if [ -f "$SCRIPT_DIR/og-image.gif" ]; then
+	cp "$SCRIPT_DIR/og-image.gif" "$OUT_DIR/og-image.gif"
 fi
+
+# Copy wordmark logo assets (Quake mark morphing into the GitHub fork glyph).
+for asset in quake-logo.svg Octicons-repo-forked.svg; do
+	if [ -f "$SCRIPT_DIR/$asset" ]; then
+		cp "$SCRIPT_DIR/$asset" "$OUT_DIR/$asset"
+	fi
+done
 
 echo "Done. Output in $OUT_DIR/"

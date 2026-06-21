@@ -20,7 +20,7 @@ No OpenGL is required: on WebAssembly the x86 assembly inner loops
 ## Game data (important)
 
 The engine needs Quake game data (`id1/pak0.pak`). **It is not committed to this
-repository** — id Software's data is copyrighted and not redistributable here.
+repository**: id Software's data is copyrighted and not redistributable here.
 
 - The **GitHub Pages workflow downloads the freely-available shareware
   `pak0.pak` at build time**, so the deployed site is playable out of the box.
@@ -65,7 +65,7 @@ python3 -m http.server 8000
 - **ESC** for the menu, **`** (backtick) for the console.
 - **Fullscreen**: click the **Fullscreen** button under the canvas, or
   double-click the canvas. Press **ESC** (or F11) to exit.
-- **Touch devices**: on-screen controls appear automatically — a left d-pad
+- **Touch devices**: on-screen controls appear automatically, a left d-pad
   (forward/back/strafe), **drag anywhere on the view to look**, and **Fire /
   Jump / ⏎ / ESC** buttons. Tap **Play** (or the idle overlay) to drop straight
   into a level. Wired to the engine via `Web_KeyEvent` / `Web_LookDelta` (see
@@ -75,19 +75,19 @@ python3 -m http.server 8000
 
 The web port is tuned to be shared:
 
-- **Link-unfurl cards** — OpenGraph + Twitter Card meta tags in `shell.html`
+- **Link-unfurl cards**: OpenGraph + Twitter Card meta tags in `shell.html`
   give a `summary_large_image` preview on HN/Reddit/X/Discord/Slack. The card is
-  `web/og-image.png` (1200×630); `build.sh` copies it into `dist/` and the tags
-  point at `https://leereilly.net/quakelike/og-image.png`.
-- **Social share menu** — the Share button opens a menu with one-click intents
+  `web/og-image.gif`; `build.sh` copies it into `dist/` and the tags
+  point at `https://leereilly.net/quakelike/og-image.gif`.
+- **Social share menu**: the Share button opens a menu with one-click intents
   for **X, Bluesky, Reddit, Hacker News, LinkedIn, Facebook** plus Copy link,
   each prefilled with `#Quake30`.
-- **Shareable look** — the active **filter + CRT + ASCII** state is encoded in
+- **Shareable look**: the active **filter + CRT + ASCII** state is encoded in
   the URL hash (e.g. `#f=2&crt=1`) and restored on load, so you can share
   "Quake in Synthwave + CRT" as a link.
-- **Anniversary banner** — a dismissible "Quake turns 30 today" banner with a
+- **Anniversary banner**: a dismissible "Quake turns 30 today" banner with a
   one-shot confetti burst (state stored in `localStorage`).
-- **Death share prompt** — when you die, a prompt appears above the protip with
+- **Death share prompt**: when you die, a prompt appears above the protip with
   your run stats (baddies fragged + time survived, plus the procgen seed if it
   was a generated dungeon) and a **Share your run** button into the social menu.
 
@@ -95,7 +95,7 @@ The web port is tuned to be shared:
 ## Video filters
 
 Because the software renderer is fully palettized, the whole game can be
-recolored in real time by remapping the 256-color table — no GPU shaders
+recolored in real time by remapping the 256-color table, no GPU shaders
 required. Use the buttons under the canvas, or the console command `vidfilter`
 (cycles), or set the archived cvar `vid_filter` directly:
 
@@ -113,25 +113,25 @@ calls the exported `Web_SetFilter()` via `Module.ccall`.
 
 Two extra screen effects toggle from the **FX** buttons under the canvas:
 
-- **📺 CRT** — scanlines + a corner vignette + subtle flicker. Pure CSS overlay
+- **📺 CRT**: scanlines + a corner vignette + subtle flicker. Pure CSS overlay
   on the canvas (`#crt-overlay` in `web/shell.html`), so it costs nothing.
-- **▣ ASCII** — the engine downsamples each frame into a 100×56 grid of the
+- **▣ ASCII**: the engine downsamples each frame into a 100×56 grid of the
   *current* (post-filter) colors (`VID_BuildAscii` in `web/vid_sdl.c`, exported
   via `Web_GetAscii`/`Web_AsciiEnable`); the shell reads that grid every frame
   and draws glyphs over the canvas on a `<canvas>` overlay. Because it samples
-  the filtered colors, the ASCII view follows the active theme — green for
+  the filtered colors, the ASCII view follows the active theme, green for
   Matrix, red/orange for Red Hot, magenta/cyan for Synthwave, full color for
   Normal.
 
-Filters and FX stack — e.g. Red Hot + CRT.
+Filters and FX stack, e.g. Red Hot + CRT.
 
 ## Capture & share (Shot / GIF)
 
-Two buttons under the canvas turn the live game into shareable media — perfect
+Two buttons under the canvas turn the live game into shareable media, perfect
 for demos and social clips:
 
-- **📷 Shot** — saves a PNG screenshot of the current frame.
-- **🎞 GIF** — click to start recording, click again to stop (auto-stops after
+- **📷 Shot**: saves a PNG screenshot of the current frame.
+- **🎞 GIF**: click to start recording, click again to stop (auto-stops after
   8 seconds), and an animated GIF downloads automatically. A small toast
   confirms each save.
 
@@ -156,7 +156,7 @@ build step:
 Quake's original soundtrack was composed by **Trent Reznor / Nine Inch Nails**,
 so dark industrial is the canonical vibe. The web port adds a **Stream Music**
 toggle to the **in-game Options menu** (ESC → Options): it streams audio from a
-hidden, off-screen SoundCloud player — **no SoundCloud UI is shown in the game**,
+hidden, off-screen SoundCloud player, **no SoundCloud UI is shown in the game**,
 only the audio plays, and it keeps playing during gameplay and in fullscreen.
 
 It works by replacing the (unavailable) "Video Options" slot in the web build's
@@ -165,8 +165,8 @@ Options menu with a checkbox. Toggling it calls a C→JS bridge
 a hidden audio-only iframe.
 
 The default source is **Nine Inch Nails** (`soundcloud.com/nineinchnails`). The
-embed only resolves real SoundCloud resources — a **track, playlist, or user**
-permalink — *not* `/tags/` URLs. To stream something else, change the URL inside
+embed only resolves real SoundCloud resources, a **track, playlist, or user**
+permalink, *not* `/tags/` URLs. To stream something else, change the URL inside
 the `Web_MusicStreamJS` `EM_JS` block in `web/snd_sdl.c`.
 
 > Browsers block autoplay until you interact with the page; toggling the menu
@@ -193,6 +193,6 @@ The site is published at `https://<owner>.github.io/<repo>/`.
 - Software renderer only, fixed 320×200 internal resolution, scaled up by the
   browser (the authentic 1996 look). Pass `-width`/`-height` (≤ 320×200) or
   `-scale N` via the Emscripten `arguments` if you want to tweak it.
-- Single-player only — networking is stubbed to the loopback driver
+- Single-player only, networking is stubbed to the loopback driver
   (`net_none.c`), so there are no online/LAN servers.
 - CD audio is disabled (`cd_null.c`); in-game sound effects work.
