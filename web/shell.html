@@ -4,25 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>Quake on the Web — 30th Anniversary (WebAssembly)</title>
-<meta name="description" content="Play Quake (1996) in your browser. id Software's classic shooter recompiled to WebAssembly — no install. Live palette filters, CRT/ASCII FX, and one-click GIF capture. Celebrating 30 years.">
+<title>Quake on the Web: 30th Anniversary (WebAssembly)</title>
+<meta name="description" content="Play Quake (1996) in your browser. id Software's classic shooter recompiled to WebAssembly, no install. Live palette filters, CRT/ASCII FX, and one-click GIF capture. Celebrating 30 years.">
 <link rel="canonical" href="https://leereilly.net/quakelike/">
 
 <!-- Social link-unfurl cards (OpenGraph + Twitter) -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Quake on the Web">
 <meta property="og:url" content="https://leereilly.net/quakelike/">
-<meta property="og:title" content="Quake on the Web — 30 years later, playable in your browser">
-<meta property="og:description" content="id Software's 1996 shooter, recompiled to WebAssembly. No install — click to play. Synthwave/CRT/ASCII filters and one-click GIF capture.">
+<meta property="og:title" content="Quake on the Web: 30 years later, playable in your browser">
+<meta property="og:description" content="id Software's 1996 shooter, recompiled to WebAssembly. No install. Click to play. Synthwave/CRT/ASCII filters and one-click GIF capture.">
 <meta property="og:image" content="https://leereilly.net/quakelike/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="QUAKE — 30th Anniversary, 1996–2026. Play now in your browser.">
+<meta property="og:image:alt" content="QUAKE: 30th Anniversary, 1996–2026. Play now in your browser.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Quake on the Web — 30 years later, playable in your browser">
-<meta name="twitter:description" content="id Software's 1996 shooter, recompiled to WebAssembly. No install — click to play.">
+<meta name="twitter:title" content="Quake on the Web: 30 years later, playable in your browser">
+<meta name="twitter:description" content="id Software's 1996 shooter, recompiled to WebAssembly. No install. Click to play.">
 <meta name="twitter:image" content="https://leereilly.net/quakelike/og-image.png">
-<meta name="twitter:image:alt" content="QUAKE — 30th Anniversary, 1996–2026. Play now in your browser.">
+<meta name="twitter:image:alt" content="QUAKE: 30th Anniversary, 1996–2026. Play now in your browser.">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -87,6 +87,34 @@
   }
   /* Header / wordmark */
   header { display: flex; align-items: center; gap: 12px; }
+  .header-controls {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #lang-select {
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--fg-dim);
+    background-color: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 30px 0 12px;
+    height: 34px;
+    max-width: 170px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  #lang-select:hover { color: var(--fg); border-color: var(--border-strong); }
+  #lang-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #lang-select option { color: initial; }
   h1 {
     display: inline-flex;
     align-items: center;
@@ -118,7 +146,6 @@
   }
   /* Vercel-style segmented theme switcher, pinned to the top-right. */
   .theme-switcher {
-    margin-left: auto;
     display: inline-flex;
     align-items: center;
     gap: 2px;
@@ -716,7 +743,7 @@
 <div id="wrap">
   <div id="anniv" role="status">
     <span class="a-emoji">&#127874;</span>
-    <span class="a-text"><b>Quake turns 30 today.</b> Released June&nbsp;22,&nbsp;1996 &mdash; now recompiled to WebAssembly and playable right here, no install.</span>
+    <span class="a-text"><b>Quake turns 30 today.</b> Released June&nbsp;22,&nbsp;1996, now recompiled to WebAssembly and playable right here, no install.</span>
     <span class="a-actions">
       <button class="a-btn primary" id="anniv-play" type="button">&#9654; Play</button>
       <button class="a-btn" id="anniv-share" type="button">Share</button>
@@ -725,6 +752,8 @@
   </div>
   <header>
     <h1><span class="mark"></span>QUAKELIKE</h1>
+    <div class="header-controls">
+    <select id="lang-select" aria-label="Language" title="Language"></select>
     <div class="theme-switcher" role="radiogroup" aria-label="Theme">
       <button type="button" data-theme-choice="system" title="System theme" aria-label="System theme">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -736,8 +765,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
       </button>
     </div>
+    </div>
   </header>
-  <p id="hint">An experimental Quake-like experience in the browser built with GitHub Copilot from the original Quake source code.</p>
+  <p id="hint" data-i18n="hint">An experimental Quake-like experience in the browser built with GitHub Copilot from the original Quake source code.</p>
   <div class="card">
     <div id="stage">
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
@@ -752,36 +782,36 @@
           <div class="tc d-right" data-key="46">&#9654;</div>
         </div>
         <div class="btns">
-          <div class="tc b-fire" data-key="200">FIRE</div>
-          <div class="tc b-jump" data-key="32">JUMP</div>
+          <div class="tc b-fire" data-key="200" data-i18n="fire">FIRE</div>
+          <div class="tc b-jump" data-key="32" data-i18n="jump">JUMP</div>
           <div class="tc b-enter" data-key="13">&#9166;</div>
         </div>
         <div class="tc b-esc" data-key="27">ESC</div>
       </div>
     </div>
-    <div id="status">Loading&hellip;</div>
+    <div id="status" data-i18n="loading">Loading&hellip;</div>
     <progress hidden id="progress" max="100" value="0"></progress>
   </div>
   <div id="deathshare">
     <span class="ds-skull">&#128128;</span>
     <span class="ds-text" id="deathshare-text"></span>
-    <button class="ds-share" id="deathshare-share" type="button">Share your run</button>
+    <button class="ds-share" id="deathshare-share" type="button" data-i18n="shareRun">Share your run</button>
     <button class="ds-close" id="deathshare-close" type="button" aria-label="Dismiss">&times;</button>
   </div>
   <div id="protip" title="Click for another tip">
-    <span class="protip-label">ProTip</span>
-    <span class="protip-body">Press <kbd>`</kbd> to open the console, then try <code id="protip-cmd">god</code> &mdash; <span id="protip-desc">become invincible</span></span>
+    <span class="protip-label" data-i18n="protip">ProTip</span>
+    <span class="protip-body">Press <kbd>`</kbd> to open the console, then try <code id="protip-cmd">god</code>: <span id="protip-desc">become invincible</span></span>
   </div>
   <div id="controls">
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title t-filters">Filters</span>
+        <span class="panel-title t-filters" data-i18n="filters">Filters</span>
         <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
       </div>
       <div class="panel-grid">
         <span id="filters">
-          <button class="qbtn filter-btn" disabled type="button" data-filter="0">Normal</button>
-          <button class="qbtn filter-btn" disabled type="button" data-filter="1">&#128293; Red Hot</button>
+          <button class="qbtn filter-btn" disabled type="button" data-filter="0" data-i18n="normal">Normal</button>
+          <button class="qbtn filter-btn" disabled type="button" data-filter="1">&#128293; <span data-i18n="redHot">Red Hot</span></button>
           <button class="qbtn filter-btn" disabled type="button" data-filter="2">&#127750; Synthwave</button>
           <button class="qbtn filter-btn" disabled type="button" data-filter="3">&#129001; Matrix</button>
         </span>
@@ -789,7 +819,7 @@
     </div>
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title t-fx">Effects &amp; Capture</span>
+        <span class="panel-title t-fx" data-i18n="fxCapture">Effects &amp; Capture</span>
         <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"></path></svg>
       </div>
       <div class="panel-grid">
@@ -804,21 +834,21 @@
           </button>
         </span>
         <span id="capture">
-          <button class="qbtn cap" disabled id="shot-btn" type="button" title="Save a PNG screenshot">&#128247; Shot</button>
+          <button class="qbtn cap" disabled id="shot-btn" type="button" title="Save a PNG screenshot">&#128247; <span data-i18n="shot">Shot</span></button>
           <button class="qbtn cap" disabled id="gif-btn" type="button" title="Record an animated GIF clip">&#127916; GIF</button>
-          <button class="qbtn" disabled id="share-btn" type="button" title="Share this page">&#128279; Share</button>
+          <button class="qbtn" disabled id="share-btn" type="button" title="Share this page">&#128279; <span data-i18n="share">Share</span></button>
         </span>
       </div>
     </div>
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title t-display">Display</span>
+        <span class="panel-title t-display" data-i18n="display">Display</span>
         <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
       </div>
-      <button class="qbtn" disabled id="fullscreen-btn" type="button">Toggle Fullscreen</button>
+      <button class="qbtn" disabled id="fullscreen-btn" type="button" data-i18n="fullscreen">Toggle Fullscreen</button>
       <div class="res">
         <div class="res-row">
-          <span class="res-label">Resolution</span>
+          <span class="res-label" data-i18n="resolution">Resolution</span>
           <span class="res-val" id="res-val">640 x 400</span>
         </div>
         <div class="res-bar"><span></span></div>
@@ -827,24 +857,24 @@
   </div>
   <div id="dungeon-bar" class="panel">
     <div class="db-head">
-      <span class="panel-title t-dungeon">&#127984; Procedural Dungeon</span>
+      <span class="panel-title t-dungeon">&#127984; <span data-i18n="dungeon">Procedural Dungeon</span></span>
       <span class="db-seed" id="db-seed" hidden></span>
     </div>
     <div class="db-actions">
-      <button class="qbtn db-new" id="newdungeon-btn" type="button" disabled title="Generate and drop into a fresh procedural dungeon">&#127922; New Dungeon</button>
-      <button class="qbtn" id="dungeonlink-btn" type="button" disabled title="Copy a shareable challenge link for this exact dungeon">&#128279; Copy Challenge Link</button>
+      <button class="qbtn db-new" id="newdungeon-btn" type="button" disabled title="Generate and drop into a fresh procedural dungeon">&#127922; <span data-i18n="newDungeon">New Dungeon</span></button>
+      <button class="qbtn" id="dungeonlink-btn" type="button" disabled title="Copy a shareable challenge link for this exact dungeon">&#128279; <span data-i18n="copyLink">Copy Challenge Link</span></button>
       <button class="qtoggle db-map active" id="minimap-btn" type="button" role="switch" aria-checked="true" title="Toggle the live BSP minimap">
-        <span class="qtoggle-label">&#128506;&#65039; Minimap</span>
+        <span class="qtoggle-label">&#128506;&#65039; <span data-i18n="minimap">Minimap</span></span>
         <span class="qtoggle-switch" aria-hidden="true"><span class="qtoggle-knob"></span></span>
       </button>
     </div>
   </div>
   <div id="capture-toast"></div>
   <div class="console">
-    <span class="console-label">Console output</span>
+    <span class="console-label" data-i18n="consoleOutput">Console output</span>
     <textarea id="output" readonly></textarea>
   </div>
-  <footer id="footer">Made with <span class="heart">&#9829;</span> and GitHub Copilot from the original <a href="https://github.com/id-Software/Quake" target="_blank" rel="noopener">Quake</a> source code</footer>
+  <footer id="footer" data-i18n-html="footer">Made with <span class="heart">&#9829;</span> and GitHub Copilot from the original <a href="https://github.com/id-Software/Quake" target="_blank" rel="noopener">Quake</a> source code</footer>
 </div>
 
 <script type="text/javascript">
@@ -978,7 +1008,7 @@
       { cmd: 'give R 50', desc: 'stockpile 50 Rockets' },
       { cmd: 'skill 3', desc: 'crank the difficulty up to Nightmare' },
       { cmd: 'r_fullbright 1', desc: 'light up every surface in the map' },
-      { cmd: 'r_draworder 1', desc: 'x-ray vision \u2014 see through brushes' },
+      { cmd: 'r_draworder 1', desc: 'x-ray vision, see through brushes' },
       { cmd: 'r_drawflat 1', desc: 'strip textures to reveal raw geometry' },
       { cmd: 'r_drawviewmodel 0', desc: 'hide your weapon for a clean view' },
       { cmd: 'fov 110', desc: 'widen your field of view' },
@@ -1000,6 +1030,159 @@
     show();
     box.addEventListener('click', show);
     setInterval(show, 12000);
+  })();
+
+  // ---- Language selector + UI translations ----
+  (function () {
+    var KEY = 'quakelike-lang';
+    // Languages we can translate the UI into reliably. `dir:1` marks RTL.
+    var LANGS = [
+      { code: 'en', name: 'English' },
+      { code: 'es', name: 'Espa\u00f1ol' },
+      { code: 'fr', name: 'Fran\u00e7ais' },
+      { code: 'de', name: 'Deutsch' },
+      { code: 'it', name: 'Italiano' },
+      { code: 'pt', name: 'Portugu\u00eas' },
+      { code: 'nl', name: 'Nederlands' },
+      { code: 'pl', name: 'Polski' },
+      { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
+      { code: 'uk', name: '\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430' },
+      { code: 'cs', name: '\u010ce\u0161tina' },
+      { code: 'sv', name: 'Svenska' },
+      { code: 'da', name: 'Dansk' },
+      { code: 'fi', name: 'Suomi' },
+      { code: 'no', name: 'Norsk' },
+      { code: 'hu', name: 'Magyar' },
+      { code: 'ro', name: 'Rom\u00e2n\u0103' },
+      { code: 'el', name: '\u0395\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac' },
+      { code: 'tr', name: 'T\u00fcrk\u00e7e' },
+      { code: 'id', name: 'Bahasa Indonesia' },
+      { code: 'ms', name: 'Bahasa Melayu' },
+      { code: 'vi', name: 'Ti\u1ebfng Vi\u1ec7t' },
+      { code: 'th', name: '\u0e44\u0e17\u0e22' },
+      { code: 'hi', name: '\u0939\u093f\u0928\u094d\u0926\u0940' },
+      { code: 'bn', name: '\u09ac\u09be\u0982\u09b2\u09be' },
+      { code: 'ja', name: '\u65e5\u672c\u8a9e' },
+      { code: 'ko', name: '\ud55c\uad6d\uc5b4' },
+      { code: 'zh', name: '\u7b80\u4f53\u4e2d\u6587' },
+      { code: 'zh-Hant', name: '\u7e41\u9ad4\u4e2d\u6587' },
+      { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629', dir: 1 },
+      { code: 'he', name: '\u05e2\u05d1\u05e8\u05d9\u05ea', dir: 1 },
+      { code: 'fa', name: '\u0641\u0627\u0631\u0633\u06cc', dir: 1 }
+    ];
+
+    var T = {
+      en: { hint: "An experimental Quake-like experience in the browser built with GitHub Copilot from the original Quake source code.", fire: "FIRE", jump: "JUMP", shareRun: "Share your run", protip: "ProTip", filters: "Filters", normal: "Normal", redHot: "Red Hot", fxCapture: "Effects & Capture", shot: "Shot", share: "Share", display: "Display", fullscreen: "Toggle Fullscreen", resolution: "Resolution", dungeon: "Procedural Dungeon", newDungeon: "New Dungeon", copyLink: "Copy Challenge Link", minimap: "Minimap", consoleOutput: "Console output", loading: "Loading\u2026", footer: "Made with {heart} and GitHub Copilot from the original {quake} source code", langLabel: "Language" },
+      es: { hint: "Una experiencia experimental tipo Quake en el navegador creada con GitHub Copilot a partir del c\u00f3digo fuente original de Quake.", fire: "DISPARAR", jump: "SALTAR", shareRun: "Comparte tu partida", protip: "Consejo", filters: "Filtros", normal: "Normal", redHot: "Al rojo vivo", fxCapture: "Efectos y captura", shot: "Captura", share: "Compartir", display: "Pantalla", fullscreen: "Pantalla completa", resolution: "Resoluci\u00f3n", dungeon: "Mazmorra procedural", newDungeon: "Nueva mazmorra", copyLink: "Copiar enlace de reto", minimap: "Minimapa", consoleOutput: "Salida de consola", loading: "Cargando\u2026", footer: "Hecho con {heart} y GitHub Copilot a partir del c\u00f3digo fuente original de {quake}", langLabel: "Idioma" },
+      fr: { hint: "Une exp\u00e9rience exp\u00e9rimentale fa\u00e7on Quake dans le navigateur, cr\u00e9\u00e9e avec GitHub Copilot \u00e0 partir du code source original de Quake.", fire: "TIRER", jump: "SAUTER", shareRun: "Partagez votre partie", protip: "Astuce", filters: "Filtres", normal: "Normal", redHot: "Chauff\u00e9 \u00e0 blanc", fxCapture: "Effets et capture", shot: "Capture", share: "Partager", display: "Affichage", fullscreen: "Plein \u00e9cran", resolution: "R\u00e9solution", dungeon: "Donjon proc\u00e9dural", newDungeon: "Nouveau donjon", copyLink: "Copier le lien du d\u00e9fi", minimap: "Mini-carte", consoleOutput: "Sortie console", loading: "Chargement\u2026", footer: "R\u00e9alis\u00e9 avec {heart} et GitHub Copilot \u00e0 partir du code source original de {quake}", langLabel: "Langue" },
+      de: { hint: "Ein experimentelles Quake-\u00e4hnliches Erlebnis im Browser, erstellt mit GitHub Copilot aus dem originalen Quake-Quellcode.", fire: "FEUER", jump: "SPRINGEN", shareRun: "Teile deinen Run", protip: "Profi-Tipp", filters: "Filter", normal: "Normal", redHot: "Rotgl\u00fchend", fxCapture: "Effekte & Aufnahme", shot: "Screenshot", share: "Teilen", display: "Anzeige", fullscreen: "Vollbild umschalten", resolution: "Aufl\u00f6sung", dungeon: "Prozeduraler Dungeon", newDungeon: "Neuer Dungeon", copyLink: "Challenge-Link kopieren", minimap: "Minikarte", consoleOutput: "Konsolenausgabe", loading: "Wird geladen\u2026", footer: "Erstellt mit {heart} und GitHub Copilot aus dem originalen {quake}-Quellcode", langLabel: "Sprache" },
+      it: { hint: "Un'esperienza sperimentale in stile Quake nel browser, creata con GitHub Copilot dal codice sorgente originale di Quake.", fire: "FUOCO", jump: "SALTA", shareRun: "Condividi la tua partita", protip: "Suggerimento", filters: "Filtri", normal: "Normale", redHot: "Rovente", fxCapture: "Effetti e cattura", shot: "Schermata", share: "Condividi", display: "Schermo", fullscreen: "Schermo intero", resolution: "Risoluzione", dungeon: "Dungeon procedurale", newDungeon: "Nuovo dungeon", copyLink: "Copia link della sfida", minimap: "Minimappa", consoleOutput: "Output console", loading: "Caricamento\u2026", footer: "Realizzato con {heart} e GitHub Copilot dal codice sorgente originale di {quake}", langLabel: "Lingua" },
+      pt: { hint: "Uma experi\u00eancia experimental no estilo Quake no navegador, criada com GitHub Copilot a partir do c\u00f3digo-fonte original do Quake.", fire: "ATIRAR", jump: "PULAR", shareRun: "Compartilhe sua partida", protip: "Dica", filters: "Filtros", normal: "Normal", redHot: "Em brasa", fxCapture: "Efeitos e captura", shot: "Captura", share: "Compartilhar", display: "Tela", fullscreen: "Tela cheia", resolution: "Resolu\u00e7\u00e3o", dungeon: "Masmorra procedural", newDungeon: "Nova masmorra", copyLink: "Copiar link do desafio", minimap: "Minimapa", consoleOutput: "Sa\u00edda do console", loading: "Carregando\u2026", footer: "Feito com {heart} e GitHub Copilot a partir do c\u00f3digo-fonte original do {quake}", langLabel: "Idioma" },
+      nl: { hint: "Een experimentele Quake-achtige ervaring in de browser, gebouwd met GitHub Copilot vanuit de originele Quake-broncode.", fire: "VUREN", jump: "SPRINGEN", shareRun: "Deel je run", protip: "Tip", filters: "Filters", normal: "Normaal", redHot: "Roodgloeiend", fxCapture: "Effecten en opname", shot: "Schermafdruk", share: "Delen", display: "Weergave", fullscreen: "Volledig scherm", resolution: "Resolutie", dungeon: "Procedurele kerker", newDungeon: "Nieuwe kerker", copyLink: "Uitdagingslink kopi\u00ebren", minimap: "Minikaart", consoleOutput: "Console-uitvoer", loading: "Laden\u2026", footer: "Gemaakt met {heart} en GitHub Copilot vanuit de originele {quake}-broncode", langLabel: "Taal" },
+      pl: { hint: "Eksperymentalne do\u015bwiadczenie w stylu Quake w przegl\u0105darce, stworzone z GitHub Copilot na podstawie oryginalnego kodu \u017ar\u00f3d\u0142owego Quake.", fire: "OGIE\u0143", jump: "SKOK", shareRun: "Udost\u0119pnij swoj\u0105 rozgrywk\u0119", protip: "Porada", filters: "Filtry", normal: "Normalny", redHot: "Rozgrzany do czerwono\u015bci", fxCapture: "Efekty i przechwytywanie", shot: "Zrzut", share: "Udost\u0119pnij", display: "Wy\u015bwietlanie", fullscreen: "Pe\u0142ny ekran", resolution: "Rozdzielczo\u015b\u0107", dungeon: "Proceduralny loch", newDungeon: "Nowy loch", copyLink: "Kopiuj link wyzwania", minimap: "Minimapa", consoleOutput: "Wyj\u015bcie konsoli", loading: "\u0141adowanie\u2026", footer: "Stworzone z {heart} i GitHub Copilot na podstawie oryginalnego kodu \u017ar\u00f3d\u0142owego {quake}", langLabel: "J\u0119zyk" },
+      ru: { hint: "\u042d\u043a\u0441\u043f\u0435\u0440\u0438\u043c\u0435\u043d\u0442\u0430\u043b\u044c\u043d\u044b\u0439 \u043e\u043f\u044b\u0442 \u0432 \u0441\u0442\u0438\u043b\u0435 Quake \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435, \u0441\u043e\u0437\u0434\u0430\u043d\u043d\u044b\u0439 \u0441 GitHub Copilot \u043d\u0430 \u043e\u0441\u043d\u043e\u0432\u0435 \u043e\u0440\u0438\u0433\u0438\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0433\u043e \u043a\u043e\u0434\u0430 Quake.", fire: "\u041e\u0413\u041e\u041d\u042c", jump: "\u041f\u0420\u042b\u0416\u041e\u041a", shareRun: "\u041f\u043e\u0434\u0435\u043b\u0438\u0442\u0435\u0441\u044c \u0437\u0430\u0431\u0435\u0433\u043e\u043c", protip: "\u0421\u043e\u0432\u0435\u0442", filters: "\u0424\u0438\u043b\u044c\u0442\u0440\u044b", normal: "\u041e\u0431\u044b\u0447\u043d\u044b\u0439", redHot: "\u0420\u0430\u0441\u043a\u0430\u043b\u0451\u043d\u043d\u044b\u0439", fxCapture: "\u042d\u0444\u0444\u0435\u043a\u0442\u044b \u0438 \u0437\u0430\u0445\u0432\u0430\u0442", shot: "\u0421\u043d\u0438\u043c\u043e\u043a", share: "\u041f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f", display: "\u0414\u0438\u0441\u043f\u043b\u0435\u0439", fullscreen: "\u041f\u043e\u043b\u043d\u044b\u0439 \u044d\u043a\u0440\u0430\u043d", resolution: "\u0420\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435", dungeon: "\u041f\u0440\u043e\u0446\u0435\u0434\u0443\u0440\u043d\u043e\u0435 \u043f\u043e\u0434\u0437\u0435\u043c\u0435\u043b\u044c\u0435", newDungeon: "\u041d\u043e\u0432\u043e\u0435 \u043f\u043e\u0434\u0437\u0435\u043c\u0435\u043b\u044c\u0435", copyLink: "\u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0441\u0441\u044b\u043b\u043a\u0443 \u0432\u044b\u0437\u043e\u0432\u0430", minimap: "\u041c\u0438\u043d\u0438-\u043a\u0430\u0440\u0442\u0430", consoleOutput: "\u0412\u044b\u0432\u043e\u0434 \u043a\u043e\u043d\u0441\u043e\u043b\u0438", loading: "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026", footer: "\u0421\u0434\u0435\u043b\u0430\u043d\u043e \u0441 {heart} \u0438 GitHub Copilot \u043d\u0430 \u043e\u0441\u043d\u043e\u0432\u0435 \u043e\u0440\u0438\u0433\u0438\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0433\u043e \u043a\u043e\u0434\u0430 {quake}", langLabel: "\u042f\u0437\u044b\u043a" },
+      uk: { hint: "\u0415\u043a\u0441\u043f\u0435\u0440\u0438\u043c\u0435\u043d\u0442\u0430\u043b\u044c\u043d\u0438\u0439 \u0434\u043e\u0441\u0432\u0456\u0434 \u0443 \u0441\u0442\u0438\u043b\u0456 Quake \u0443 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0456, \u0441\u0442\u0432\u043e\u0440\u0435\u043d\u0438\u0439 \u0437 GitHub Copilot \u043d\u0430 \u043e\u0441\u043d\u043e\u0432\u0456 \u043e\u0440\u0438\u0433\u0456\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0432\u0438\u0445\u0456\u0434\u043d\u043e\u0433\u043e \u043a\u043e\u0434\u0443 Quake.", fire: "\u0412\u041e\u0413\u041e\u041d\u042c", jump: "\u0421\u0422\u0420\u0418\u0411\u041e\u041a", shareRun: "\u041f\u043e\u0434\u0456\u043b\u0456\u0442\u044c\u0441\u044f \u0437\u0430\u0431\u0456\u0433\u043e\u043c", protip: "\u041f\u043e\u0440\u0430\u0434\u0430", filters: "\u0424\u0456\u043b\u044c\u0442\u0440\u0438", normal: "\u0417\u0432\u0438\u0447\u0430\u0439\u043d\u0438\u0439", redHot: "\u0420\u043e\u0437\u043f\u0435\u0447\u0435\u043d\u0438\u0439", fxCapture: "\u0415\u0444\u0435\u043a\u0442\u0438 \u0442\u0430 \u0437\u0430\u0445\u043e\u043f\u043b\u0435\u043d\u043d\u044f", shot: "\u0417\u043d\u0456\u043c\u043e\u043a", share: "\u041f\u043e\u0434\u0456\u043b\u0438\u0442\u0438\u0441\u044f", display: "\u0414\u0438\u0441\u043f\u043b\u0435\u0439", fullscreen: "\u041f\u043e\u0432\u043d\u0438\u0439 \u0435\u043a\u0440\u0430\u043d", resolution: "\u0420\u043e\u0437\u0434\u0456\u043b\u044c\u043d\u0430 \u0437\u0434\u0430\u0442\u043d\u0456\u0441\u0442\u044c", dungeon: "\u041f\u0440\u043e\u0446\u0435\u0434\u0443\u0440\u043d\u0435 \u043f\u0456\u0434\u0437\u0435\u043c\u0435\u043b\u043b\u044f", newDungeon: "\u041d\u043e\u0432\u0435 \u043f\u0456\u0434\u0437\u0435\u043c\u0435\u043b\u043b\u044f", copyLink: "\u041a\u043e\u043f\u0456\u044e\u0432\u0430\u0442\u0438 \u043f\u043e\u0441\u0438\u043b\u0430\u043d\u043d\u044f \u0432\u0438\u043a\u043b\u0438\u043a\u0443", minimap: "\u041c\u0456\u043d\u0456\u043a\u0430\u0440\u0442\u0430", consoleOutput: "\u0412\u0438\u0432\u0456\u0434 \u043a\u043e\u043d\u0441\u043e\u043b\u0456", loading: "\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f\u2026", footer: "\u0417\u0440\u043e\u0431\u043b\u0435\u043d\u043e \u0437 {heart} \u0442\u0430 GitHub Copilot \u043d\u0430 \u043e\u0441\u043d\u043e\u0432\u0456 \u043e\u0440\u0438\u0433\u0456\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0432\u0438\u0445\u0456\u0434\u043d\u043e\u0433\u043e \u043a\u043e\u0434\u0443 {quake}", langLabel: "\u041c\u043e\u0432\u0430" },
+      cs: { hint: "Experiment\u00e1ln\u00ed z\u00e1\u017eitek ve stylu Quake v prohl\u00ed\u017ee\u010di, vytvo\u0159en\u00fd pomoc\u00ed GitHub Copilot z p\u016fvodn\u00edho zdrojov\u00e9ho k\u00f3du Quake.", fire: "PALBA", jump: "SKOK", shareRun: "Sd\u00edlejte sv\u016fj pr\u016fchod", protip: "Tip", filters: "Filtry", normal: "Norm\u00e1ln\u00ed", redHot: "Roz\u017ehaven\u00fd", fxCapture: "Efekty a z\u00e1znam", shot: "Sn\u00edmek", share: "Sd\u00edlet", display: "Zobrazen\u00ed", fullscreen: "Cel\u00e1 obrazovka", resolution: "Rozli\u0161en\u00ed", dungeon: "Procedur\u00e1ln\u00ed kobka", newDungeon: "Nov\u00e1 kobka", copyLink: "Kop\u00edrovat odkaz v\u00fdzvy", minimap: "Minimapa", consoleOutput: "V\u00fdstup konzole", loading: "Na\u010d\u00edt\u00e1n\u00ed\u2026", footer: "Vytvo\u0159eno s {heart} a GitHub Copilot z p\u016fvodn\u00edho zdrojov\u00e9ho k\u00f3du {quake}", langLabel: "Jazyk" },
+      sv: { hint: "En experimentell Quake-liknande upplevelse i webbl\u00e4saren, byggd med GitHub Copilot fr\u00e5n Quakes ursprungliga k\u00e4llkod.", fire: "ELD", jump: "HOPP", shareRun: "Dela din runda", protip: "Tips", filters: "Filter", normal: "Normal", redHot: "Gl\u00f6dhet", fxCapture: "Effekter och inspelning", shot: "Sk\u00e4rmbild", share: "Dela", display: "Sk\u00e4rm", fullscreen: "Helsk\u00e4rm", resolution: "Uppl\u00f6sning", dungeon: "Procedurell dungeon", newDungeon: "Ny dungeon", copyLink: "Kopiera utmaningsl\u00e4nk", minimap: "Minikarta", consoleOutput: "Konsolutdata", loading: "Laddar\u2026", footer: "Skapad med {heart} och GitHub Copilot fr\u00e5n {quake}s ursprungliga k\u00e4llkod", langLabel: "Spr\u00e5k" },
+      da: { hint: "En eksperimentel Quake-lignende oplevelse i browseren, bygget med GitHub Copilot ud fra Quakes oprindelige kildekode.", fire: "SKYD", jump: "HOP", shareRun: "Del din runde", protip: "Tip", filters: "Filtre", normal: "Normal", redHot: "R\u00f8dgl\u00f8dende", fxCapture: "Effekter og optagelse", shot: "Sk\u00e6rmbillede", share: "Del", display: "Sk\u00e6rm", fullscreen: "Fuld sk\u00e6rm", resolution: "Opl\u00f8sning", dungeon: "Proceduregenereret fangek\u00e6lder", newDungeon: "Ny fangek\u00e6lder", copyLink: "Kopi\u00e9r udfordringslink", minimap: "Minikort", consoleOutput: "Konsoloutput", loading: "Indl\u00e6ser\u2026", footer: "Lavet med {heart} og GitHub Copilot ud fra {quake}s oprindelige kildekode", langLabel: "Sprog" },
+      fi: { hint: "Kokeellinen Quake-tyylinen el\u00e4mys selaimessa, luotu GitHub Copilotilla Quaken alkuper\u00e4isest\u00e4 l\u00e4hdekoodista.", fire: "TULTA", jump: "HYPPY", shareRun: "Jaa suorituksesi", protip: "Vinkki", filters: "Suodattimet", normal: "Normaali", redHot: "Hehkuva", fxCapture: "Tehosteet ja tallennus", shot: "Kuvakaappaus", share: "Jaa", display: "N\u00e4ytt\u00f6", fullscreen: "Koko n\u00e4ytt\u00f6", resolution: "Tarkkuus", dungeon: "Proseduraalinen luolasto", newDungeon: "Uusi luolasto", copyLink: "Kopioi haastelinkki", minimap: "Pienoiskartta", consoleOutput: "Konsolin tuloste", loading: "Ladataan\u2026", footer: "Tehty {heart} ja GitHub Copilot, pohjana {quake}n alkuper\u00e4inen l\u00e4hdekoodi", langLabel: "Kieli" },
+      no: { hint: "En eksperimentell Quake-lignende opplevelse i nettleseren, bygget med GitHub Copilot fra Quakes opprinnelige kildekode.", fire: "SKYT", jump: "HOPP", shareRun: "Del runden din", protip: "Tips", filters: "Filtre", normal: "Normal", redHot: "R\u00f8dgl\u00f8dende", fxCapture: "Effekter og opptak", shot: "Skjermbilde", share: "Del", display: "Skjerm", fullscreen: "Fullskjerm", resolution: "Oppl\u00f8sning", dungeon: "Prosedyregenerert fangehull", newDungeon: "Nytt fangehull", copyLink: "Kopier utfordringslenke", minimap: "Minikart", consoleOutput: "Konsollutdata", loading: "Laster\u2026", footer: "Laget med {heart} og GitHub Copilot fra {quake}s opprinnelige kildekode", langLabel: "Spr\u00e5k" },
+      hu: { hint: "Egy k\u00eds\u00e9rleti, Quake-szer\u0171 \u00e9lm\u00e9ny a b\u00f6ng\u00e9sz\u0151ben, GitHub Copilottal k\u00e9sz\u00edtve az eredeti Quake forr\u00e1sk\u00f3db\u00f3l.", fire: "T\u0170Z", jump: "UGR\u00c1S", shareRun: "Oszd meg a fut\u00e1sod", protip: "Tipp", filters: "Sz\u0171r\u0151k", normal: "Norm\u00e1l", redHot: "Izz\u00f3", fxCapture: "Effektek \u00e9s r\u00f6gz\u00edt\u00e9s", shot: "K\u00e9perny\u0151k\u00e9p", share: "Megoszt\u00e1s", display: "Kijelz\u0151", fullscreen: "Teljes k\u00e9perny\u0151", resolution: "Felbont\u00e1s", dungeon: "Elj\u00e1r\u00e1sgener\u00e1lt t\u00f6ml\u00f6c", newDungeon: "\u00daj t\u00f6ml\u00f6c", copyLink: "Kih\u00edv\u00e1slink m\u00e1sol\u00e1sa", minimap: "Minit\u00e9rk\u00e9p", consoleOutput: "Konzolkimenet", loading: "Bet\u00f6lt\u00e9s\u2026", footer: "K\u00e9sz\u00fclt {heart} \u00e9s GitHub Copilot seg\u00edts\u00e9g\u00e9vel az eredeti {quake} forr\u00e1sk\u00f3db\u00f3l", langLabel: "Nyelv" },
+      ro: { hint: "O experien\u021b\u0103 experimental\u0103 \u00een stilul Quake \u00een browser, creat\u0103 cu GitHub Copilot pornind de la codul surs\u0103 original al Quake.", fire: "FOC", jump: "SARI", shareRun: "Distribuie runda ta", protip: "Sfat", filters: "Filtre", normal: "Normal", redHot: "Incandescent", fxCapture: "Efecte \u0219i captur\u0103", shot: "Captur\u0103", share: "Distribuie", display: "Afi\u0219aj", fullscreen: "Ecran complet", resolution: "Rezolu\u021bie", dungeon: "Temni\u021b\u0103 procedural\u0103", newDungeon: "Temni\u021b\u0103 nou\u0103", copyLink: "Copiaz\u0103 linkul provoc\u0103rii", minimap: "Minihart\u0103", consoleOutput: "Ie\u0219ire consol\u0103", loading: "Se \u00eencarc\u0103\u2026", footer: "Creat cu {heart} \u0219i GitHub Copilot pornind de la codul surs\u0103 original al {quake}", langLabel: "Limb\u0103" },
+      el: { hint: "\u039c\u03b9\u03b1 \u03c0\u03b5\u03b9\u03c1\u03b1\u03bc\u03b1\u03c4\u03b9\u03ba\u03ae \u03b5\u03bc\u03c0\u03b5\u03b9\u03c1\u03af\u03b1 \u03c4\u03cd\u03c0\u03bf\u03c5 Quake \u03c3\u03c4\u03bf \u03c0\u03c1\u03cc\u03b3\u03c1\u03b1\u03bc\u03bc\u03b1 \u03c0\u03b5\u03c1\u03b9\u03ae\u03b3\u03b7\u03c3\u03b7\u03c2, \u03c6\u03c4\u03b9\u03b1\u03b3\u03bc\u03ad\u03bd\u03b7 \u03bc\u03b5 \u03c4\u03bf GitHub Copilot \u03b1\u03c0\u03cc \u03c4\u03bf\u03bd \u03b1\u03c1\u03c7\u03b9\u03ba\u03cc \u03c0\u03b7\u03b3\u03b1\u03af\u03bf \u03ba\u03ce\u03b4\u03b9\u03ba\u03b1 \u03c4\u03bf\u03c5 Quake.", fire: "\u03a0\u03a5\u03a1", jump: "\u0386\u039b\u039c\u0391", shareRun: "\u039c\u03bf\u03b9\u03c1\u03b1\u03c3\u03c4\u03b5\u03af\u03c4\u03b5 \u03c4\u03bf \u03c0\u03b1\u03b9\u03c7\u03bd\u03af\u03b4\u03b9 \u03c3\u03b1\u03c2", protip: "\u03a3\u03c5\u03bc\u03b2\u03bf\u03c5\u03bb\u03ae", filters: "\u03a6\u03af\u03bb\u03c4\u03c1\u03b1", normal: "\u039a\u03b1\u03bd\u03bf\u03bd\u03b9\u03ba\u03cc", redHot: "\u03a0\u03c5\u03c1\u03c9\u03bc\u03ad\u03bd\u03bf", fxCapture: "\u0395\u03c6\u03ad \u03ba\u03b1\u03b9 \u03bb\u03ae\u03c8\u03b7", shot: "\u03a3\u03c4\u03b9\u03b3\u03bc\u03b9\u03cc\u03c4\u03c5\u03c0\u03bf", share: "\u039a\u03bf\u03b9\u03bd\u03bf\u03c0\u03bf\u03af\u03b7\u03c3\u03b7", display: "\u039f\u03b8\u03cc\u03bd\u03b7", fullscreen: "\u03a0\u03bb\u03ae\u03c1\u03b7\u03c2 \u03bf\u03b8\u03cc\u03bd\u03b7", resolution: "\u0391\u03bd\u03ac\u03bb\u03c5\u03c3\u03b7", dungeon: "\u0394\u03b9\u03b1\u03b4\u03b9\u03ba\u03b1\u03c3\u03c4\u03b9\u03ba\u03cc \u03bc\u03c0\u03bf\u03c5\u03bd\u03c4\u03c1\u03bf\u03cd\u03bc\u03b9", newDungeon: "\u039d\u03ad\u03bf \u03bc\u03c0\u03bf\u03c5\u03bd\u03c4\u03c1\u03bf\u03cd\u03bc\u03b9", copyLink: "\u0391\u03bd\u03c4\u03b9\u03b3\u03c1\u03b1\u03c6\u03ae \u03c3\u03c5\u03bd\u03b4\u03ad\u03c3\u03bc\u03bf\u03c5 \u03c0\u03c1\u03cc\u03ba\u03bb\u03b7\u03c3\u03b7\u03c2", minimap: "\u039c\u03af\u03bd\u03b9 \u03c7\u03ac\u03c1\u03c4\u03b7\u03c2", consoleOutput: "\u0388\u03be\u03bf\u03b4\u03bf\u03c2 \u03ba\u03bf\u03bd\u03c3\u03cc\u03bb\u03b1\u03c2", loading: "\u03a6\u03cc\u03c1\u03c4\u03c9\u03c3\u03b7\u2026", footer: "\u03a6\u03c4\u03b9\u03b1\u03b3\u03bc\u03ad\u03bd\u03bf \u03bc\u03b5 {heart} \u03ba\u03b1\u03b9 GitHub Copilot \u03b1\u03c0\u03cc \u03c4\u03bf\u03bd \u03b1\u03c1\u03c7\u03b9\u03ba\u03cc \u03c0\u03b7\u03b3\u03b1\u03af\u03bf \u03ba\u03ce\u03b4\u03b9\u03ba\u03b1 \u03c4\u03bf\u03c5 {quake}", langLabel: "\u0393\u03bb\u03ce\u03c3\u03c3\u03b1" },
+      tr: { hint: "Taray\u0131c\u0131da, GitHub Copilot ile Quake'in orijinal kaynak kodundan olu\u015fturulmu\u015f deneysel, Quake benzeri bir deneyim.", fire: "ATE\u015e", jump: "ZIPLA", shareRun: "Oyununu payla\u015f", protip: "\u0130pucu", filters: "Filtreler", normal: "Normal", redHot: "K\u0131z\u0131l S\u0131cak", fxCapture: "Efektler ve Yakalama", shot: "Ekran G\u00f6r\u00fcnt\u00fcs\u00fc", share: "Payla\u015f", display: "G\u00f6r\u00fcnt\u00fc", fullscreen: "Tam Ekran", resolution: "\u00c7\u00f6z\u00fcn\u00fcrl\u00fck", dungeon: "Prosed\u00fcrel Zindan", newDungeon: "Yeni Zindan", copyLink: "Meydan okuma ba\u011flant\u0131s\u0131n\u0131 kopyala", minimap: "Mini Harita", consoleOutput: "Konsol \u00e7\u0131kt\u0131s\u0131", loading: "Y\u00fckleniyor\u2026", footer: "{heart} ve GitHub Copilot ile {quake}'in orijinal kaynak kodundan yap\u0131ld\u0131", langLabel: "Dil" },
+      id: { hint: "Pengalaman eksperimental ala Quake di browser, dibuat dengan GitHub Copilot dari kode sumber asli Quake.", fire: "TEMBAK", jump: "LOMPAT", shareRun: "Bagikan permainanmu", protip: "Tips", filters: "Filter", normal: "Normal", redHot: "Membara", fxCapture: "Efek & Tangkapan", shot: "Tangkapan Layar", share: "Bagikan", display: "Tampilan", fullscreen: "Layar Penuh", resolution: "Resolusi", dungeon: "Ruang Bawah Tanah Prosedural", newDungeon: "Ruang Bawah Tanah Baru", copyLink: "Salin Tautan Tantangan", minimap: "Peta Mini", consoleOutput: "Keluaran konsol", loading: "Memuat\u2026", footer: "Dibuat dengan {heart} dan GitHub Copilot dari kode sumber asli {quake}", langLabel: "Bahasa" },
+      ms: { hint: "Pengalaman eksperimen seperti Quake dalam pelayar, dibina dengan GitHub Copilot daripada kod sumber asal Quake.", fire: "TEMBAK", jump: "LOMPAT", shareRun: "Kongsi permainan anda", protip: "Petua", filters: "Penapis", normal: "Biasa", redHot: "Membara", fxCapture: "Kesan & Tangkapan", shot: "Tangkapan Skrin", share: "Kongsi", display: "Paparan", fullscreen: "Skrin Penuh", resolution: "Resolusi", dungeon: "Penjara Bawah Tanah Prosedural", newDungeon: "Penjara Bawah Tanah Baharu", copyLink: "Salin Pautan Cabaran", minimap: "Peta Mini", consoleOutput: "Output konsol", loading: "Memuatkan\u2026", footer: "Dibina dengan {heart} dan GitHub Copilot daripada kod sumber asal {quake}", langLabel: "Bahasa" },
+      vi: { hint: "M\u1ed9t tr\u1ea3i nghi\u1ec7m th\u1eed nghi\u1ec7m ki\u1ec3u Quake tr\u00ean tr\u00ecnh duy\u1ec7t, \u0111\u01b0\u1ee3c t\u1ea1o b\u1eb1ng GitHub Copilot t\u1eeb m\u00e3 ngu\u1ed3n g\u1ed1c c\u1ee7a Quake.", fire: "B\u1eaeN", jump: "NH\u1ea2Y", shareRun: "Chia s\u1ebd l\u01b0\u1ee3t ch\u01a1i c\u1ee7a b\u1ea1n", protip: "M\u1eb9o", filters: "B\u1ed9 l\u1ecdc", normal: "B\u00ecnh th\u01b0\u1eddng", redHot: "N\u00f3ng \u0111\u1ecf", fxCapture: "Hi\u1ec7u \u1ee9ng & Ghi", shot: "\u1ea2nh ch\u1ee5p", share: "Chia s\u1ebd", display: "Hi\u1ec3n th\u1ecb", fullscreen: "To\u00e0n m\u00e0n h\u00ecnh", resolution: "\u0110\u1ed9 ph\u00e2n gi\u1ea3i", dungeon: "H\u1ea7m ng\u1ee5c th\u1ee7 t\u1ee5c", newDungeon: "H\u1ea7m ng\u1ee5c m\u1edbi", copyLink: "Sao ch\u00e9p li\u00ean k\u1ebft th\u1eed th\u00e1ch", minimap: "B\u1ea3n \u0111\u1ed3 nh\u1ecf", consoleOutput: "\u0110\u1ea7u ra b\u1ea3ng \u0111i\u1ec1u khi\u1ec3n", loading: "\u0110ang t\u1ea3i\u2026", footer: "\u0110\u01b0\u1ee3c t\u1ea1o b\u1eb1ng {heart} v\u00e0 GitHub Copilot t\u1eeb m\u00e3 ngu\u1ed3n g\u1ed1c c\u1ee7a {quake}", langLabel: "Ng\u00f4n ng\u1eef" },
+      th: { hint: "\u0e1b\u0e23\u0e30\u0e2a\u0e1a\u0e01\u0e32\u0e23\u0e13\u0e4c\u0e41\u0e19\u0e27 Quake \u0e40\u0e0a\u0e34\u0e07\u0e17\u0e14\u0e25\u0e2d\u0e07\u0e43\u0e19\u0e40\u0e1a\u0e23\u0e32\u0e27\u0e4c\u0e40\u0e0b\u0e2d\u0e23\u0e4c \u0e2a\u0e23\u0e49\u0e32\u0e07\u0e14\u0e49\u0e27\u0e22 GitHub Copilot \u0e08\u0e32\u0e01\u0e0b\u0e2d\u0e23\u0e4c\u0e2a\u0e42\u0e04\u0e49\u0e14\u0e14\u0e31\u0e49\u0e07\u0e40\u0e14\u0e34\u0e21\u0e02\u0e2d\u0e07 Quake", fire: "\u0e22\u0e34\u0e07", jump: "\u0e01\u0e23\u0e30\u0e42\u0e14\u0e14", shareRun: "\u0e41\u0e0a\u0e23\u0e4c\u0e01\u0e32\u0e23\u0e40\u0e25\u0e48\u0e19\u0e02\u0e2d\u0e07\u0e04\u0e38\u0e13", protip: "\u0e40\u0e04\u0e25\u0e47\u0e14\u0e25\u0e31\u0e1a", filters: "\u0e1f\u0e34\u0e25\u0e40\u0e15\u0e2d\u0e23\u0e4c", normal: "\u0e1b\u0e01\u0e15\u0e34", redHot: "\u0e23\u0e49\u0e2d\u0e19\u0e41\u0e14\u0e07", fxCapture: "\u0e40\u0e2d\u0e1f\u0e40\u0e1f\u0e01\u0e15\u0e4c\u0e41\u0e25\u0e30\u0e01\u0e32\u0e23\u0e08\u0e31\u0e1a\u0e20\u0e32\u0e1e", shot: "\u0e20\u0e32\u0e1e\u0e2b\u0e19\u0e49\u0e32\u0e08\u0e2d", share: "\u0e41\u0e0a\u0e23\u0e4c", display: "\u0e01\u0e32\u0e23\u0e41\u0e2a\u0e14\u0e07\u0e1c\u0e25", fullscreen: "\u0e40\u0e15\u0e47\u0e21\u0e08\u0e2d", resolution: "\u0e04\u0e27\u0e32\u0e21\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14", dungeon: "\u0e14\u0e31\u0e19\u0e40\u0e08\u0e35\u0e22\u0e19\u0e2a\u0e38\u0e48\u0e21", newDungeon: "\u0e14\u0e31\u0e19\u0e40\u0e08\u0e35\u0e22\u0e19\u0e43\u0e2b\u0e21\u0e48", copyLink: "\u0e04\u0e31\u0e14\u0e25\u0e2d\u0e01\u0e25\u0e34\u0e07\u0e01\u0e4c\u0e17\u0e49\u0e32\u0e17\u0e32\u0e22", minimap: "\u0e41\u0e1c\u0e19\u0e17\u0e35\u0e48\u0e22\u0e48\u0e2d", consoleOutput: "\u0e40\u0e2d\u0e32\u0e15\u0e4c\u0e1e\u0e38\u0e15\u0e04\u0e2d\u0e19\u0e42\u0e0b\u0e25", loading: "\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14\u2026", footer: "\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e14\u0e49\u0e27\u0e22 {heart} \u0e41\u0e25\u0e30 GitHub Copilot \u0e08\u0e32\u0e01\u0e0b\u0e2d\u0e23\u0e4c\u0e2a\u0e42\u0e04\u0e49\u0e14\u0e14\u0e31\u0e49\u0e07\u0e40\u0e14\u0e34\u0e21\u0e02\u0e2d\u0e07 {quake}", langLabel: "\u0e20\u0e32\u0e29\u0e32" },
+      hi: { hint: "\u092c\u094d\u0930\u093e\u0909\u091c\u093c\u0930 \u092e\u0947\u0902 \u090f\u0915 \u092a\u094d\u0930\u093e\u092f\u094b\u0917\u093f\u0915 Quake-\u091c\u0948\u0938\u093e \u0905\u0928\u0941\u092d\u0935, GitHub Copilot \u0915\u0947 \u0938\u093e\u0925 Quake \u0915\u0947 \u092e\u0942\u0932 \u0938\u094b\u0930\u094d\u0938 \u0915\u094b\u0921 \u0938\u0947 \u092c\u0928\u093e\u092f\u093e \u0917\u092f\u093e\u0964", fire: "\u092b\u093e\u092f\u0930", jump: "\u0915\u0942\u0926\u0947\u0902", shareRun: "\u0905\u092a\u0928\u093e \u0930\u0928 \u0938\u093e\u091d\u093e \u0915\u0930\u0947\u0902", protip: "\u0938\u0941\u091d\u093e\u0935", filters: "\u092b\u093c\u093f\u0932\u094d\u091f\u0930", normal: "\u0938\u093e\u092e\u093e\u0928\u094d\u092f", redHot: "\u0932\u093e\u0932 \u0917\u0930\u092e", fxCapture: "\u092a\u094d\u0930\u092d\u093e\u0935 \u0914\u0930 \u0915\u0948\u092a\u094d\u091a\u0930", shot: "\u0938\u094d\u0915\u094d\u0930\u0940\u0928\u0936\u0949\u091f", share: "\u0938\u093e\u091d\u093e \u0915\u0930\u0947\u0902", display: "\u0921\u093f\u0938\u094d\u092a\u094d\u0932\u0947", fullscreen: "\u092a\u0942\u0930\u094d\u0923 \u0938\u094d\u0915\u094d\u0930\u0940\u0928", resolution: "\u0930\u093f\u095b\u0949\u0932\u094d\u092f\u0942\u0936\u0928", dungeon: "\u092a\u094d\u0930\u0915\u094d\u0930\u093f\u092f\u093e\u0924\u094d\u092e\u0915 \u0915\u093e\u0932\u0915\u094b\u0920\u0930\u0940", newDungeon: "\u0928\u0908 \u0915\u093e\u0932\u0915\u094b\u0920\u0930\u0940", copyLink: "\u091a\u0941\u0928\u094c\u0924\u0940 \u0932\u093f\u0902\u0915 \u0915\u0949\u092a\u0940 \u0915\u0930\u0947\u0902", minimap: "\u092e\u093f\u0928\u0940 \u092e\u093e\u0928\u091a\u093f\u0924\u094d\u0930", consoleOutput: "\u0915\u0902\u0938\u094b\u0932 \u0906\u0909\u091f\u092a\u0941\u091f", loading: "\u0932\u094b\u0921 \u0939\u094b \u0930\u0939\u093e \u0939\u0948\u2026", footer: "{heart} \u0914\u0930 GitHub Copilot \u0915\u0947 \u0938\u093e\u0925 {quake} \u0915\u0947 \u092e\u0942\u0932 \u0938\u094b\u0930\u094d\u0938 \u0915\u094b\u0921 \u0938\u0947 \u092c\u0928\u093e\u092f\u093e \u0917\u092f\u093e", langLabel: "\u092d\u093e\u0937\u093e" },
+      bn: { hint: "\u09ac\u09cd\u09b0\u09be\u0989\u099c\u09be\u09b0\u09c7 \u098f\u0995\u099f\u09bf \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09ae\u09c2\u09b2\u0995 Quake-\u09b8\u09a6\u09c3\u09b6 \u0985\u09ad\u09bf\u099c\u09cd\u099e\u09a4\u09be, GitHub Copilot \u09a6\u09bf\u09af\u09bc\u09c7 Quake-\u098f\u09b0 \u09ae\u09c2\u09b2 \u09b8\u09cb\u09b0\u09cd\u09b8 \u0995\u09cb\u09a1 \u09a5\u09c7\u0995\u09c7 \u09a4\u09c8\u09b0\u09bf\u0964", fire: "\u09ab\u09be\u09af\u09bc\u09be\u09b0", jump: "\u09b2\u09be\u09ab", shareRun: "\u0986\u09aa\u09a8\u09be\u09b0 \u09b0\u09be\u09a8 \u09b6\u09c7\u09af\u09bc\u09be\u09b0 \u0995\u09b0\u09c1\u09a8", protip: "\u09aa\u09b0\u09be\u09ae\u09b0\u09cd\u09b6", filters: "\u09ab\u09bf\u09b2\u09cd\u099f\u09be\u09b0", normal: "\u09b8\u09cd\u09ac\u09be\u09ad\u09be\u09ac\u09bf\u0995", redHot: "\u09b2\u09be\u09b2 \u0997\u09b0\u09ae", fxCapture: "\u0987\u09ab\u09c7\u0995\u09cd\u099f \u0993 \u0995\u09cd\u09af\u09be\u09aa\u099a\u09be\u09b0", shot: "\u09b8\u09cd\u0995\u09cd\u09b0\u09bf\u09a8\u09b6\u099f", share: "\u09b6\u09c7\u09af\u09bc\u09be\u09b0", display: "\u09a1\u09bf\u09b8\u09aa\u09cd\u09b2\u09c7", fullscreen: "\u09aa\u09c2\u09b0\u09cd\u09a3 \u09b8\u09cd\u0995\u09cd\u09b0\u09bf\u09a8", resolution: "\u09b0\u09c7\u099c\u09cb\u09b2\u09bf\u0989\u09b6\u09a8", dungeon: "\u09aa\u09cd\u09b0\u0995\u09cd\u09b0\u09bf\u09af\u09bc\u09be\u0997\u09a4 \u0995\u09be\u09b0\u09be\u0997\u09be\u09b0", newDungeon: "\u09a8\u09a4\u09c1\u09a8 \u0995\u09be\u09b0\u09be\u0997\u09be\u09b0", copyLink: "\u099a\u09cd\u09af\u09be\u09b2\u09c7\u099e\u09cd\u099c \u09b2\u09bf\u0999\u09cd\u0995 \u0995\u09aa\u09bf \u0995\u09b0\u09c1\u09a8", minimap: "\u09ae\u09bf\u09a8\u09bf\u09ae\u09cd\u09af\u09be\u09aa", consoleOutput: "\u0995\u09a8\u09b8\u09cb\u09b2 \u0986\u0989\u099f\u09aa\u09c1\u099f", loading: "\u09b2\u09cb\u09a1 \u09b9\u099a\u09cd\u099b\u09c7\u2026", footer: "{heart} \u098f\u09ac\u0982 GitHub Copilot \u09a6\u09bf\u09af\u09bc\u09c7 {quake}-\u098f\u09b0 \u09ae\u09c2\u09b2 \u09b8\u09cb\u09b0\u09cd\u09b8 \u0995\u09cb\u09a1 \u09a5\u09c7\u0995\u09c7 \u09a4\u09c8\u09b0\u09bf", langLabel: "\u09ad\u09be\u09b7\u09be" },
+      ja: { hint: "GitHub Copilot \u3092\u4f7f\u3044\u3001Quake \u306e\u30aa\u30ea\u30b8\u30ca\u30eb\u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u304b\u3089\u4f5c\u3089\u308c\u305f\u3001\u30d6\u30e9\u30a6\u30b6\u3067\u52d5\u304f\u5b9f\u9a13\u7684\u306a Quake \u98a8\u4f53\u9a13\u3002", fire: "\u30d5\u30a1\u30a4\u30a2", jump: "\u30b8\u30e3\u30f3\u30d7", shareRun: "\u30d7\u30ec\u30a4\u3092\u5171\u6709", protip: "\u30d2\u30f3\u30c8", filters: "\u30d5\u30a3\u30eb\u30bf\u30fc", normal: "\u30ce\u30fc\u30de\u30eb", redHot: "\u30ec\u30c3\u30c9\u30db\u30c3\u30c8", fxCapture: "\u30a8\u30d5\u30a7\u30af\u30c8\u3068\u30ad\u30e3\u30d7\u30c1\u30e3", shot: "\u30b9\u30af\u30b7\u30e7", share: "\u5171\u6709", display: "\u30c7\u30a3\u30b9\u30d7\u30ec\u30a4", fullscreen: "\u5168\u753b\u9762\u8868\u793a", resolution: "\u89e3\u50cf\u5ea6", dungeon: "\u81ea\u52d5\u751f\u6210\u30c0\u30f3\u30b8\u30e7\u30f3", newDungeon: "\u65b0\u3057\u3044\u30c0\u30f3\u30b8\u30e7\u30f3", copyLink: "\u30c1\u30e3\u30ec\u30f3\u30b8\u30ea\u30f3\u30af\u3092\u30b3\u30d4\u30fc", minimap: "\u30df\u30cb\u30de\u30c3\u30d7", consoleOutput: "\u30b3\u30f3\u30bd\u30fc\u30eb\u51fa\u529b", loading: "\u8aad\u307f\u8fbc\u307f\u4e2d\u2026", footer: "{heart} \u3068 GitHub Copilot \u3067 {quake} \u306e\u30aa\u30ea\u30b8\u30ca\u30eb\u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u304b\u3089\u4f5c\u6210", langLabel: "\u8a00\u8a9e" },
+      ko: { hint: "GitHub Copilot\uc73c\ub85c Quake\uc758 \uc6d0\ubcf8 \uc18c\uc2a4 \ucf54\ub4dc\uc5d0\uc11c \ub9cc\ub4e0 \ube0c\ub77c\uc6b0\uc800\uc6a9 \uc2e4\ud5d8\uc801 Quake \uc2a4\ud0c0\uc77c \uacbd\ud5d8.", fire: "\ubc1c\uc0ac", jump: "\uc810\ud504", shareRun: "\ud50c\ub808\uc774 \uacf5\uc720", protip: "\ud301", filters: "\ud544\ud130", normal: "\uae30\ubcf8", redHot: "\ub808\ub4dc \ud56b", fxCapture: "\ud6a8\uacfc \ubc0f \uce21\uc815", shot: "\uc2a4\ud06c\ub9b0\uc0f7", share: "\uacf5\uc720", display: "\ub514\uc2a4\ud50c\ub808\uc774", fullscreen: "\uc804\uccb4 \ud654\uba74", resolution: "\ud574\uc0c1\ub3c4", dungeon: "\uc808\ucc28\uc801 \ub358\uc804", newDungeon: "\uc0c8 \ub358\uc804", copyLink: "\ucc4c\ub9b0\uc9c0 \ub9c1\ud06c \ubcf5\uc0ac", minimap: "\ubbf8\ub2c8\ub9f5", consoleOutput: "\ucf58\uc194 \ucd9c\ub825", loading: "\ub85c\ub529 \uc911\u2026", footer: "{heart}\uc640 GitHub Copilot\uc73c\ub85c {quake}\uc758 \uc6d0\ubcf8 \uc18c\uc2a4 \ucf54\ub4dc\uc5d0\uc11c \uc81c\uc791", langLabel: "\uc5b8\uc5b4" },
+      zh: { hint: "\u4f7f\u7528 GitHub Copilot \u57fa\u4e8e Quake \u539f\u59cb\u6e90\u4ee3\u7801\u6253\u9020\u7684\u6d4f\u89c8\u5668\u5185\u5b9e\u9a8c\u6027\u7c7b Quake \u4f53\u9a8c\u3002", fire: "\u5f00\u706b", jump: "\u8df3\u8dc3", shareRun: "\u5206\u4eab\u4f60\u7684\u6218\u7ee9", protip: "\u63d0\u793a", filters: "\u6ee4\u955c", normal: "\u6b63\u5e38", redHot: "\u70bd\u70ed\u7ea2", fxCapture: "\u7279\u6548\u4e0e\u6355\u83b7", shot: "\u622a\u56fe", share: "\u5206\u4eab", display: "\u663e\u793a", fullscreen: "\u5168\u5c4f", resolution: "\u5206\u8fa8\u7387", dungeon: "\u7a0b\u5e8f\u751f\u6210\u5730\u7262", newDungeon: "\u65b0\u5730\u7262", copyLink: "\u590d\u5236\u6311\u6218\u94fe\u63a5", minimap: "\u5c0f\u5730\u56fe", consoleOutput: "\u63a7\u5236\u53f0\u8f93\u51fa", loading: "\u52a0\u8f7d\u4e2d\u2026", footer: "\u4f7f\u7528 {heart} \u548c GitHub Copilot \u57fa\u4e8e {quake} \u539f\u59cb\u6e90\u4ee3\u7801\u5236\u4f5c", langLabel: "\u8bed\u8a00" },
+      'zh-Hant': { hint: "\u4f7f\u7528 GitHub Copilot \u57fa\u65bc Quake \u539f\u59cb\u539f\u59cb\u78bc\u6253\u9020\u7684\u700f\u89bd\u5668\u5167\u5be6\u9a57\u6027\u985e Quake \u9ad4\u9a57\u3002", fire: "\u958b\u706b", jump: "\u8df3\u8e8d", shareRun: "\u5206\u4eab\u4f60\u7684\u6230\u7e3e", protip: "\u63d0\u793a", filters: "\u6ffe\u93e1", normal: "\u6b63\u5e38", redHot: "\u71be\u71b1\u7d05", fxCapture: "\u7279\u6548\u8207\u64f7\u53d6", shot: "\u622a\u5716", share: "\u5206\u4eab", display: "\u986f\u793a", fullscreen: "\u5168\u87a2\u5e55", resolution: "\u89e3\u6790\u5ea6", dungeon: "\u7a0b\u5e8f\u751f\u6210\u5730\u57ce", newDungeon: "\u65b0\u5730\u57ce", copyLink: "\u8907\u88fd\u6311\u6230\u9023\u7d50", minimap: "\u5c0f\u5730\u5716", consoleOutput: "\u4e3b\u63a7\u53f0\u8f38\u51fa", loading: "\u8f09\u5165\u4e2d\u2026", footer: "\u4f7f\u7528 {heart} \u548c GitHub Copilot \u57fa\u65bc {quake} \u539f\u59cb\u539f\u59cb\u78bc\u88fd\u4f5c", langLabel: "\u8a9e\u8a00" },
+      ar: { hint: "\u062a\u062c\u0631\u0628\u0629 \u062a\u062c\u0631\u064a\u0628\u064a\u0629 \u0634\u0628\u064a\u0647\u0629 \u0628\u0644\u0639\u0628\u0629 Quake \u0641\u064a \u0627\u0644\u0645\u062a\u0635\u0641\u062d\u060c \u062a\u0645 \u0625\u0646\u0634\u0627\u0624\u0647\u0627 \u0628\u0627\u0633\u062a\u062e\u062f\u0627\u0645 GitHub Copilot \u0645\u0646 \u0627\u0644\u0643\u0648\u062f \u0627\u0644\u0645\u0635\u062f\u0631\u064a \u0627\u0644\u0623\u0635\u0644\u064a \u0644\u0644\u0639\u0628\u0629 Quake.", fire: "\u0625\u0637\u0644\u0627\u0642", jump: "\u0642\u0641\u0632", shareRun: "\u0634\u0627\u0631\u0643 \u062c\u0648\u0644\u062a\u0643", protip: "\u0646\u0635\u064a\u062d\u0629", filters: "\u0627\u0644\u0645\u0631\u0634\u062d\u0627\u062a", normal: "\u0639\u0627\u062f\u064a", redHot: "\u0623\u062d\u0645\u0631 \u0645\u0644\u062a\u0647\u0628", fxCapture: "\u0627\u0644\u062a\u0623\u062b\u064a\u0631\u0627\u062a \u0648\u0627\u0644\u0627\u0644\u062a\u0642\u0627\u0637", shot: "\u0644\u0642\u0637\u0629 \u0634\u0627\u0634\u0629", share: "\u0645\u0634\u0627\u0631\u0643\u0629", display: "\u0627\u0644\u0639\u0631\u0636", fullscreen: "\u0645\u0644\u0621 \u0627\u0644\u0634\u0627\u0634\u0629", resolution: "\u0627\u0644\u062f\u0642\u0629", dungeon: "\u0632\u0646\u0632\u0627\u0646\u0629 \u0625\u062c\u0631\u0627\u0626\u064a\u0629", newDungeon: "\u0632\u0646\u0632\u0627\u0646\u0629 \u062c\u062f\u064a\u062f\u0629", copyLink: "\u0646\u0633\u062e \u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u062d\u062f\u064a", minimap: "\u062e\u0631\u064a\u0637\u0629 \u0645\u0635\u063a\u0631\u0629", consoleOutput: "\u0645\u062e\u0631\u062c\u0627\u062a \u0648\u062d\u062f\u0629 \u0627\u0644\u062a\u062d\u0643\u0645", loading: "\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0645\u064a\u0644\u2026", footer: "\u0635\u064f\u0646\u0639 \u0628\u0640 {heart} \u0648 GitHub Copilot \u0645\u0646 \u0627\u0644\u0643\u0648\u062f \u0627\u0644\u0645\u0635\u062f\u0631\u064a \u0627\u0644\u0623\u0635\u0644\u064a \u0644\u0640 {quake}", langLabel: "\u0627\u0644\u0644\u063a\u0629" },
+      he: { hint: "\u05d7\u05d5\u05d5\u05d9\u05d4 \u05e0\u05d9\u05e1\u05d9\u05d5\u05e0\u05d9\u05ea \u05d1\u05e1\u05d2\u05e0\u05d5\u05df Quake \u05d1\u05d3\u05e4\u05d3\u05e4\u05df, \u05e9\u05e0\u05d1\u05e0\u05ea\u05d4 \u05e2\u05dd GitHub Copilot \u05de\u05e7\u05d5\u05d3 \u05d4\u05de\u05e7\u05d5\u05e8 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9 \u05e9\u05dc Quake.", fire: "\u05d9\u05e8\u05d9", jump: "\u05e7\u05e4\u05d9\u05e6\u05d4", shareRun: "\u05e9\u05ea\u05e4\u05d5 \u05d0\u05ea \u05d4\u05de\u05e9\u05d7\u05e7 \u05e9\u05dc\u05db\u05dd", protip: "\u05d8\u05d9\u05e4", filters: "\u05de\u05e1\u05e0\u05e0\u05d9\u05dd", normal: "\u05e8\u05d2\u05d9\u05dc", redHot: "\u05d0\u05d3\u05d5\u05dd \u05dc\u05d5\u05d4\u05d8", fxCapture: "\u05d0\u05e4\u05e7\u05d8\u05d9\u05dd \u05d5\u05e6\u05d9\u05dc\u05d5\u05dd", shot: "\u05e6\u05d9\u05dc\u05d5\u05dd \u05de\u05e1\u05da", share: "\u05e9\u05d9\u05ea\u05d5\u05e3", display: "\u05ea\u05e6\u05d5\u05d2\u05d4", fullscreen: "\u05de\u05e1\u05da \u05de\u05dc\u05d0", resolution: "\u05e8\u05d6\u05d5\u05dc\u05d5\u05e6\u05d9\u05d4", dungeon: "\u05e6\u05d9\u05e0\u05d5\u05e7 \u05e4\u05e8\u05d5\u05e6\u05d3\u05d5\u05e8\u05dc\u05d9", newDungeon: "\u05e6\u05d9\u05e0\u05d5\u05e7 \u05d7\u05d3\u05e9", copyLink: "\u05d4\u05e2\u05ea\u05e7 \u05e7\u05d9\u05e9\u05d5\u05e8 \u05d0\u05ea\u05d2\u05e8", minimap: "\u05de\u05e4\u05d4 \u05de\u05d5\u05e7\u05d8\u05e0\u05ea", consoleOutput: "\u05e4\u05dc\u05d8 \u05de\u05e1\u05d5\u05e3", loading: "\u05d8\u05d5\u05e2\u05df\u2026", footer: "\u05e0\u05d5\u05e6\u05e8 \u05e2\u05dd {heart} \u05d5-GitHub Copilot \u05de\u05e7\u05d5\u05d3 \u05d4\u05de\u05e7\u05d5\u05e8 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9 \u05e9\u05dc {quake}", langLabel: "\u05e9\u05e4\u05d4" },
+      fa: { hint: "\u06cc\u06a9 \u062a\u062c\u0631\u0628\u0647 \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc \u0634\u0628\u06cc\u0647 Quake \u062f\u0631 \u0645\u0631\u0648\u0631\u06af\u0631\u060c \u0633\u0627\u062e\u062a\u0647\u200c\u0634\u062f\u0647 \u0628\u0627 GitHub Copilot \u0627\u0632 \u06a9\u062f \u0645\u0646\u0628\u0639 \u0627\u0635\u0644\u06cc Quake.", fire: "\u0634\u0644\u06cc\u06a9", jump: "\u067e\u0631\u0634", shareRun: "\u0628\u0627\u0632\u06cc \u062e\u0648\u062f \u0631\u0627 \u0628\u0647 \u0627\u0634\u062a\u0631\u0627\u06a9 \u0628\u06af\u0630\u0627\u0631\u06cc\u062f", protip: "\u0646\u06a9\u062a\u0647", filters: "\u0641\u06cc\u0644\u062a\u0631\u0647\u0627", normal: "\u0639\u0627\u062f\u06cc", redHot: "\u0633\u0631\u062e\u0650 \u062f\u0627\u063a", fxCapture: "\u062c\u0644\u0648\u0647\u200c\u0647\u0627 \u0648 \u0636\u0628\u0637", shot: "\u062a\u0635\u0648\u06cc\u0631 \u0635\u0641\u062d\u0647", share: "\u0627\u0634\u062a\u0631\u0627\u06a9\u200c\u06af\u0630\u0627\u0631\u06cc", display: "\u0646\u0645\u0627\u06cc\u0634", fullscreen: "\u062a\u0645\u0627\u0645\u200c\u0635\u0641\u062d\u0647", resolution: "\u0648\u0636\u0648\u062d", dungeon: "\u0633\u06cc\u0627\u0647\u200c\u0686\u0627\u0644 \u0631\u0648\u06cc\u0647\u200c\u0627\u06cc", newDungeon: "\u0633\u06cc\u0627\u0647\u200c\u0686\u0627\u0644 \u062c\u062f\u06cc\u062f", copyLink: "\u06a9\u067e\u06cc \u067e\u06cc\u0648\u0646\u062f \u0686\u0627\u0644\u0634", minimap: "\u0646\u0642\u0634\u0647 \u06a9\u0648\u0686\u06a9", consoleOutput: "\u062e\u0631\u0648\u062c\u06cc \u06a9\u0646\u0633\u0648\u0644", loading: "\u062f\u0631 \u062d\u0627\u0644 \u0628\u0627\u0631\u06af\u0630\u0627\u0631\u06cc\u2026", footer: "\u0633\u0627\u062e\u062a\u0647\u200c\u0634\u062f\u0647 \u0628\u0627 {heart} \u0648 GitHub Copilot \u0627\u0632 \u06a9\u062f \u0645\u0646\u0628\u0639 \u0627\u0635\u0644\u06cc {quake}", langLabel: "\u0632\u0628\u0627\u0646" }
+    };
+
+    var heartHTML = '<span class="heart">&#9829;</span>';
+    var quakeHTML = '<a href="https://github.com/id-Software/Quake" target="_blank" rel="noopener">Quake</a>';
+    var dir = {}; LANGS.forEach(function (l) { dir[l.code] = l.dir ? 'rtl' : 'ltr'; });
+    var sel = document.getElementById('lang-select');
+    var root = document.documentElement;
+
+    LANGS.forEach(function (l) {
+      var opt = document.createElement('option');
+      opt.value = l.code;
+      opt.textContent = l.name;
+      sel.appendChild(opt);
+    });
+
+    // Map any browser/stored tag (e.g. "pt-BR", "zh-TW") onto a supported code.
+    function resolve(tag) {
+      if (!tag) return null;
+      tag = String(tag);
+      var lower = tag.toLowerCase();
+      for (var i = 0; i < LANGS.length; i++) {
+        if (LANGS[i].code.toLowerCase() === lower) return LANGS[i].code;
+      }
+      if (lower.indexOf('zh') === 0) {
+        return /(hant|tw|hk|mo)/.test(lower) ? 'zh-Hant' : 'zh';
+      }
+      var primary = lower.split('-')[0];
+      for (var j = 0; j < LANGS.length; j++) {
+        if (LANGS[j].code.toLowerCase() === primary) return LANGS[j].code;
+      }
+      return null;
+    }
+
+    function browserLang() {
+      var list = navigator.languages && navigator.languages.length
+        ? navigator.languages : [navigator.language || navigator.userLanguage];
+      for (var i = 0; i < list.length; i++) {
+        var hit = resolve(list[i]);
+        if (hit) return hit;
+      }
+      return 'en';
+    }
+
+    function apply(code) {
+      var t = T[code] || T.en;
+      document.querySelectorAll('[data-i18n]').forEach(function (el) {
+        var key = el.getAttribute('data-i18n');
+        var val = (t[key] != null) ? t[key] : T.en[key];
+        if (val != null) el.textContent = val;
+      });
+      document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
+        var key = el.getAttribute('data-i18n-html');
+        var tpl = (t[key] != null) ? t[key] : T.en[key];
+        if (tpl != null) {
+          el.innerHTML = tpl.replace('{heart}', heartHTML).replace('{quake}', quakeHTML);
+        }
+      });
+      root.setAttribute('lang', code);
+      root.setAttribute('dir', dir[code] || 'ltr');
+      if (sel) {
+        sel.value = code;
+        sel.setAttribute('aria-label', t.langLabel || 'Language');
+        sel.setAttribute('title', t.langLabel || 'Language');
+      }
+    }
+
+    function stored() {
+      try { return resolve(localStorage.getItem(KEY)); } catch (e) { return null; }
+    }
+
+    if (sel) {
+      sel.addEventListener('change', function () {
+        var code = resolve(sel.value) || 'en';
+        try { localStorage.setItem(KEY, code); } catch (e) {}
+        apply(code);
+      });
+    }
+
+    apply(stored() || browserLang());
   })();
 
   // ---- Theme switcher (Vercel-style: System / Light / Dark) ----
@@ -1688,7 +1871,7 @@
         var mode = bits.length ? ' (' + bits.join(' + ') + ')' : '';
         return {
           title: 'Quake on the Web',
-          text: 'Quake turns 30 \u2014 play the 1996 classic in your browser' + mode + '. #Quake30',
+          text: 'Quake turns 30: play the 1996 classic in your browser' + mode + '. #Quake30',
           url: location.href
         };
       }
@@ -1781,7 +1964,7 @@
         var html = 'You died after fragging <b>' + k + ' ' + baddies + '</b> and surviving <b>' +
                    fmtDuration(secs) + '</b>.';
         if (proc) {
-          html += ' That was a procgen dungeon &mdash; <span class="ds-seed">seed ' + seed + '</span>.';
+          html += ' That was a procgen dungeon, <span class="ds-seed">seed ' + seed + '</span>.';
         }
         html += ' Brag about it!';
         textEl.innerHTML = html;
@@ -2021,7 +2204,7 @@
         var s = seedFromHash();
         if (s) setTimeout(function () {
           cmd('procgen ' + s);
-          qToast('Loading challenge \u2014 seed ' + s);
+          qToast('Loading challenge, seed ' + s);
           setTimeout(function () { try { canvas.focus(); } catch (e) {} }, 120);
         }, 500);
       };
