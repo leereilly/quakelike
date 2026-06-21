@@ -1,30 +1,34 @@
-# quakelike
+<p align="center">
+  <img src="mark.svg" alt="quakelike spinning mark" width="120" height="120">
+</p>
+
+# Quakelike
 
 This is id Software's original Quake source code, brought back to life in the
 browser. The portable C engine (`WinQuake`) is compiled to WebAssembly with
 Emscripten, so the 1996 software renderer runs at full speed on a modern web
-page with no plugins, no GPU shaders, and no install. On top of that base I've
-added a bunch of things the original never had.
+page. The GitHub Copilot App helped me hack a few things...
 
-The five I'm most proud of:
+The eight features I'd sell over a fake late-night game radio ad:
 
-1. **Quake, in your browser.** The real engine compiled to WebAssembly and
-   playable on GitHub Pages. The shareware `pak0.pak` is fetched at build time,
-   so the deployed site just works.
-2. **Procedurally generated dungeons.** Every run can drop you into a fresh,
-   walled, textured, monster-filled level, with a slipgate portal that warps you
-   to a brand new layout once you clear the current one.
-3. **Real-time video filters and post-process FX.** Because the renderer is
-   8-bit palettized, the whole game recolors live: Red Hot, Synthwave, and
-   Matrix looks, plus a CRT scanline overlay and a full ASCII-art mode that
-   follows the active palette.
-4. **One-click capture.** A Shot button saves a PNG and a GIF button records a
-   short animated clip and encodes it right in the browser, no server round trip
-   and no extra dependencies.
-5. **Built to be shared.** Social share cards, deep links that restore your
-   exact filter and FX combo, a death screen with your run stats, and an in-game
-   toggle that streams Nine Inch Nails (Quake's original composer) while you
-   play.
+- **Quake, in your browser.** The original C
+   engine is compiled to WebAssembly and runs on GitHub Pages. Build grabs the
+   shareware `pak0.pak`, deploy boots, and you're fragging.
+- **Procedural dungeon runs.** Clear a level, jump through the slipgate, and
+   get a fresh layout with new walls, textures, monsters, and door logic. Every
+   run feels like a new bad neighborhood.
+- **Live palette FX.** The renderer stays true to Quake's 8-bit pipeline, then
+   remaps colors in real time for Red Hot, Synthwave, and Matrix looks, plus CRT
+   scanlines and full ASCII mode synced to the active palette.
+- **One-click evidence capture.** Hit Shot for PNG or GIF for a short animated
+   clip, encoded right in the browser.
+   dependencies.
+- **SoundCloud integration.** Flip on a music stream in game while you roam,
+   fight, and panic in narrow hallways.
+- **Translation support.** UI and messaging can be localized so the same panic
+   works in more than one language.
+- **Copilot in the console.** Built-in assistant hooks for experiments,
+   debugging, and faster iteration while you tune the web port. Press <kbd>`</kbd> to open the Quake console and type `copilot`.
 
 ![quakelike](quakelike.webp)
 
