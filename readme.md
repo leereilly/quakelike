@@ -36,7 +36,7 @@ browser... with a few additions (thanks GitHub Copilot)!
 
 - **Copilot in the console.** Built-in assistant hooks for experiments,
    debugging, and faster iteration while you tune the web port. Press <kbd>`</kbd> to open the Quake console and type `copilot`.
-
+   
 ## Play and build
 
 The browser port lives in `web/`. See [`web/README.md`](web/README.md) for the

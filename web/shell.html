@@ -737,51 +737,6 @@
     #changelog ul { grid-template-columns: 1fr; }
   }
 
-  /* ===== Anniversary banner ===================================== */
-  #anniv {
-    display: none;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    margin: 0 0 14px;
-    padding: 10px 12px 10px 14px;
-    border: 1px solid rgba(182, 146, 246, 0.45);
-    border-radius: var(--radius);
-    background: linear-gradient(90deg, rgba(124, 58, 237, 0.20), rgba(56, 189, 248, 0.12));
-    color: var(--fg);
-    font-size: 14px;
-  }
-  #anniv.show { display: flex; }
-  #anniv .a-emoji { font-size: 22px; line-height: 1; flex: none; }
-  #anniv .a-text { flex: 1 1 auto; line-height: 1.4; }
-  #anniv .a-text b { color: #cbb6fb; }
-  #anniv .a-actions { display: inline-flex; gap: 8px; flex: none; align-items: center; }
-  #anniv .a-btn {
-    height: 30px; padding: 0 12px;
-    border-radius: 999px; border: 1px solid var(--border-strong);
-    background: var(--panel-2); color: var(--fg);
-    font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
-    transition: background .15s ease, border-color .15s ease;
-  }
-  #anniv .a-btn.primary { background: #b692f6; border-color: #b692f6; color: #0a0a0a; }
-  #anniv .a-btn:hover { border-color: #b692f6; }
-  #anniv .a-close {
-    flex: none; width: 28px; height: 28px; border-radius: 6px;
-    border: 1px solid transparent; background: transparent; color: var(--fg-dim);
-    font-size: 18px; line-height: 1; cursor: pointer;
-  }
-  #anniv .a-close:hover { background: var(--elevated); color: var(--fg); }
-  @media (max-width: 560px) {
-    #anniv { flex-wrap: wrap; }
-    #anniv .a-text { flex-basis: 100%; }
-  }
-
-  /* Confetti burst (one-shot, dependency-free). */
-  #confetti {
-    position: fixed; inset: 0; width: 100%; height: 100%;
-    pointer-events: none; z-index: 60; display: none;
-  }
-
   /* ===== In-stage overlays ===================================== */
   /* Idle attract overlay (invites a click to start) */
   #attract { display: none !important; }
@@ -884,7 +839,6 @@
 </style>
 </head>
 <body>
-<canvas id="confetti"></canvas>
 <div id="share-menu" hidden>
   <div class="sm-card" role="menu" aria-label="Share Quake">
     <div class="sm-title"><span>Share</span><button class="sm-close" id="sm-close" type="button" aria-label="Close">&times;</button></div>
@@ -898,14 +852,6 @@
   </div>
 </div>
 <div id="wrap">
-  <div id="anniv" role="status">
-&#127881;</span>
-    <span class="a-actions">
-      <button class="a-btn primary" id="anniv-play" type="button">&#9654; Play</button>
-      <button class="a-btn" id="anniv-share" type="button">Share</button>
-    </span>
-    <button class="a-close" id="anniv-close" type="button" aria-label="Dismiss">&times;</button>
-  </div>
   <header>
     <h1><span class="mark"><span class="lm lm-q"></span><span class="lm lm-f"></span></span>QUAKELIKE</h1>
     <div class="header-controls">
@@ -1929,49 +1875,9 @@
 
     // --- jump straight into a level (bypasses menus; great on mobile) ---
     function startGame() {
-      var b = document.getElementById('anniv');
-      if (b) b.classList.remove('show');
       if (!ready) return;
       cmd('map start');
       setTimeout(function () { try { canvas.focus(); } catch (e) {} }, 50);
-    }
-
-    // --- one-shot confetti (no dependencies) ---
-    function fireConfetti() {
-      var c = document.getElementById('confetti');
-      if (!c) return;
-      var ctx = c.getContext('2d');
-      var W = c.width = window.innerWidth;
-      var H = c.height = window.innerHeight;
-      c.style.display = 'block';
-      var colors = ['#b692f6', '#7dd3fc', '#ff77c8', '#ffd36e', '#7ee787', '#f2555a'];
-      var parts = [];
-      for (var i = 0; i < 150; i++) {
-        parts.push({
-          x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
-          vx: (Math.random() - 0.5) * 1.8, vy: 2 + Math.random() * 3.6,
-          s: 4 + Math.random() * 5, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3,
-          col: colors[(Math.random() * colors.length) | 0]
-        });
-      }
-      var start = performance.now(), dur = 2600;
-      function frame(t) {
-        var el = t - start;
-        ctx.clearRect(0, 0, W, H);
-        for (var i = 0; i < parts.length; i++) {
-          var p = parts[i];
-          p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.rot += p.vr;
-          ctx.save();
-          ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-          ctx.globalAlpha = Math.max(0, 1 - el / dur);
-          ctx.fillStyle = p.col;
-          ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
-          ctx.restore();
-        }
-        if (el < dur) requestAnimationFrame(frame);
-        else { ctx.clearRect(0, 0, W, H); c.style.display = 'none'; }
-      }
-      requestAnimationFrame(frame);
     }
 
     // --- shareable URL state (filter + CRT + ASCII) ---
@@ -2100,25 +2006,6 @@
     (function () {
       var btn = document.getElementById('share-btn');
       if (btn) btn.addEventListener('click', function () { ShareMenu.open(); });
-      var aShare = document.getElementById('anniv-share');
-      if (aShare) aShare.addEventListener('click', function () { ShareMenu.open(); });
-    })();
-
-    // --- Anniversary banner + confetti ---
-    (function () {
-      var banner = document.getElementById('anniv');
-      var KEY = 'q30-banner-dismissed';
-      var dismissed = false;
-      try { dismissed = localStorage.getItem(KEY) === '1'; } catch (e) {}
-      if (!dismissed) {
-        banner.classList.add('show');
-        fireConfetti();
-      }
-      document.getElementById('anniv-close').addEventListener('click', function () {
-        banner.classList.remove('show');
-        try { localStorage.setItem(KEY, '1'); } catch (e) {}
-      });
-      document.getElementById('anniv-play').addEventListener('click', startGame);
     })();
 
     // --- Did you know? banner: dismissable ---
