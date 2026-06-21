@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // in_sdl.c -- SDL2 keyboard + mouse input for the Emscripten/web port
 
 #include <SDL.h>
+#include <emscripten.h>
 #include "quakedef.h"
 
 static cvar_t	m_filter = {"m_filter", "0"};
@@ -273,4 +274,90 @@ void IN_Move (usercmd_t *cmd)
 	}
 
 	mouse_x = mouse_y = 0;
+}
+
+
+/*
+=============================================================================
+
+  Web/JS bridges
+
+  Exposed to shell.html so the browser UI can drive the engine: on-screen
+  touch controls (mobile), and a read-only window into the current level for
+  the speedrun timer. All are listed in build.sh's EXPORTED_FUNCTIONS.
+
+=============================================================================
+*/
+
+// Inject a key press/release (Quake key code) -- used by the mobile d-pad and
+// the Fire / Jump buttons. Routes through the normal bind system, so it honors
+// the player's keybindings and works in menus too.
+EMSCRIPTEN_KEEPALIVE
+void Web_KeyEvent (int key, int down)
+{
+	Key_Event (key, down ? true : false);
+}
+
+// Apply a look delta (degrees) from a touch drag. Bypasses SDL relative mouse
+// mode (there is no pointer lock on touch), nudging the view angles directly.
+EMSCRIPTEN_KEEPALIVE
+void Web_LookDelta (float dx, float dy)
+{
+	cl.viewangles[YAW]   -= dx;
+	cl.viewangles[PITCH] += dy;
+	if (cl.viewangles[PITCH] > 80)
+		cl.viewangles[PITCH] = 80;
+	if (cl.viewangles[PITCH] < -70)
+		cl.viewangles[PITCH] = -70;
+	V_StopPitchDrift ();
+}
+
+// Queue a console command (e.g. "restart" for the speedrun timer).
+EMSCRIPTEN_KEEPALIVE
+void Web_Command (const char *text)
+{
+	if (!text || !text[0])
+		return;
+	Cbuf_AddText ((char *)text);
+	Cbuf_AddText ("\n");
+}
+
+// --- read-only level state for the speedrun timer --------------------------
+EMSCRIPTEN_KEEPALIVE
+double Web_LevelTime (void)
+{
+	return cl.time;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int Web_Intermission (void)
+{
+	return cl.intermission;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char *Web_MapName (void)
+{
+	return cl.levelname;
+}
+
+// Current player health (cl.stats[STAT_HEALTH]); <= 0 means dead.
+EMSCRIPTEN_KEEPALIVE
+int Web_Health (void)
+{
+	return cl.stats[STAT_HEALTH];
+}
+
+// Monsters killed on the current level (cl.stats[STAT_MONSTERS]).
+EMSCRIPTEN_KEEPALIVE
+int Web_Kills (void)
+{
+	return cl.stats[STAT_MONSTERS];
+}
+
+// True only during live single-player play (not menus or the demo attract loop)
+EMSCRIPTEN_KEEPALIVE
+int Web_IsPlaying (void)
+{
+	return (cls.state == ca_connected && cls.signon == SIGNONS && !cls.demoplayback) ? 1 : 0;
 }

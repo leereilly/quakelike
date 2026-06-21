@@ -301,6 +301,107 @@ EMSCRIPTEN_KEEPALIVE int Web_AsciiRows (void)		{ return ASCII_ROWS; }
 #endif
 
 
+/*
+================
+Copilot_f  (easter egg)
+
+Console command "copilot" (alias "copilopt"): rick-roll the player. Drops an
+autoplaying YouTube embed of "Never Gonna Give You Up" over the game canvas,
+dressed up with the same CRT scanline + vignette look the rest of the web port
+uses, with no console text. Close it with the X button or Esc.
+================
+*/
+#ifdef __EMSCRIPTEN__
+EM_JS(void, Web_RickrollJS, (void), {
+	var id = 'qk-rickroll';
+	if (document.getElementById(id))
+		return;					// already up
+
+	// Draw the Copilot face in the devtools console using box-drawing glyphs,
+	// colored to match the avatar: cyan rounded-square eyes, a purple mouth,
+	// and two green teeth.
+	var eye = 'color:#4ad6f5;font-weight:bold';	// cyan
+	var jaw = 'color:#c08cf0;font-weight:bold';	// purple
+	var tooth = 'color:#5cf07a;font-weight:bold';	// green
+	console.log('%c \u256d\u2500\u256e \u256d\u2500\u256e', eye);
+	console.log('%c \u2570\u2500\u256f \u2570\u2500\u256f', eye);
+	console.log('%c\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e', jaw);
+	console.log('%c\u2502  %c\u2588 \u2588%c  \u2502', jaw, tooth, jaw);
+	console.log('%c\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f', jaw);
+	console.log('> Welcome to Commit Crawl. Squash bugs and ship it!');
+
+	var stage = document.getElementById('stage') || document.body;
+
+	var overlay = document.createElement('div');
+	overlay.id = id;
+	overlay.style.cssText =
+		'position:absolute;inset:0;z-index:50;background:#000;overflow:hidden;';
+
+	// The video itself, recolored a touch to sit alongside the game's palette.
+	var frame = document.createElement('iframe');
+	frame.title = 'Never Gonna Give You Up';
+	frame.allow = 'autoplay; encrypted-media';
+	frame.setAttribute('frameborder', '0');
+	frame.setAttribute('allowfullscreen', '');
+	frame.style.cssText =
+		'position:absolute;inset:0;width:100%;height:100%;border:0;' +
+		'filter:contrast(1.2) saturate(1.4) brightness(1.05);';
+	frame.src = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ' +
+		'?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1';
+	overlay.appendChild(frame);
+
+	// Scanline + vignette layer, mirroring #crt-overlay in shell.html.
+	var scan = document.createElement('div');
+	scan.style.cssText =
+		'position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;' +
+		'background:' +
+		'repeating-linear-gradient(to bottom,' +
+		'rgba(0,0,0,0) 0px,rgba(0,0,0,0) 1px,' +
+		'rgba(0,0,0,0.35) 2px,rgba(0,0,0,0.35) 3px),' +
+		'radial-gradient(ellipse at center,' +
+		'rgba(0,0,0,0) 55%,rgba(0,0,0,0.55) 100%);';
+	overlay.appendChild(scan);
+
+	var close = document.createElement('button');
+	close.type = 'button';
+	close.textContent = '\u2715';
+	close.title = 'Close (Esc)';
+	close.style.cssText =
+		'position:absolute;top:6px;right:8px;z-index:2;width:28px;height:28px;' +
+		'border:1px solid #fff;border-radius:6px;background:rgba(0,0,0,0.6);' +
+		'color:#fff;font:16px/1 monospace;cursor:pointer;';
+	overlay.appendChild(close);
+
+	function teardown() {
+		window.removeEventListener('keydown', onKey, true);
+		if (overlay.parentNode)
+			overlay.parentNode.removeChild(overlay);
+		var c = document.getElementById('canvas');
+		if (c) c.focus();
+	}
+	function onKey(e) {
+		if (e.key === 'Escape' || e.keyCode === 27) {
+			e.preventDefault();
+			e.stopPropagation();
+			teardown();
+		}
+	}
+	close.addEventListener('click', function (e) { e.stopPropagation(); teardown(); });
+	// Swallow Esc before the engine sees it, so it closes the video (not the menu).
+	window.addEventListener('keydown', onKey, true);
+
+	stage.appendChild(overlay);
+});
+#endif
+
+void	Copilot_f (void)
+{
+#ifdef __EMSCRIPTEN__
+	Web_RickrollJS ();
+#endif
+}
+
+
 void	VID_SetPalette (unsigned char *palette)
 {
 	int		i;
@@ -404,6 +505,8 @@ void	VID_Init (unsigned char *palette)
 
 	Cvar_RegisterVariable (&vid_filter);
 	Cmd_AddCommand ("vidfilter", VID_CycleFilter_f);
+	Cmd_AddCommand ("copilot", Copilot_f);
+	Cmd_AddCommand ("copilopt", Copilot_f);	// common typo, same easter egg
 	VID_BuildFilter ();
 
 	Procgen_Init ();

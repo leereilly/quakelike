@@ -2,9 +2,28 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>Quake (WebAssembly)</title>
+<title>Quake on the Web — 30th Anniversary (WebAssembly)</title>
+<meta name="description" content="Play Quake (1996) in your browser. id Software's classic shooter recompiled to WebAssembly — no install. Live palette filters, CRT/ASCII FX, and one-click GIF capture. Celebrating 30 years.">
+<link rel="canonical" href="https://leereilly.net/quakelike/">
+
+<!-- Social link-unfurl cards (OpenGraph + Twitter) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Quake on the Web">
+<meta property="og:url" content="https://leereilly.net/quakelike/">
+<meta property="og:title" content="Quake on the Web — 30 years later, playable in your browser">
+<meta property="og:description" content="id Software's 1996 shooter, recompiled to WebAssembly. No install — click to play. Synthwave/CRT/ASCII filters and one-click GIF capture.">
+<meta property="og:image" content="https://leereilly.net/quakelike/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="QUAKE — 30th Anniversary, 1996–2026. Play now in your browser.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Quake on the Web — 30 years later, playable in your browser">
+<meta name="twitter:description" content="id Software's 1996 shooter, recompiled to WebAssembly. No install — click to play.">
+<meta name="twitter:image" content="https://leereilly.net/quakelike/og-image.png">
+<meta name="twitter:image:alt" content="QUAKE — 30th Anniversary, 1996–2026. Play now in your browser.">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,10 +40,24 @@
     --fg-faint: #6b6b6b;
     --accent: #e5484d;
     --accent-hover: #f2555a;
+    --orange: #f5a623;
+    --orange-hover: #ffb648;
+    --orange-soft: rgba(245, 166, 35, 0.12);
     --radius: 12px;
     --radius-sm: 8px;
     --sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --mono: 'Geist Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  html[data-theme="light"] {
+    --bg: #ffffff;
+    --panel: #fafafa;
+    --panel-2: #f2f2f2;
+    --elevated: #ebebeb;
+    --border: rgba(0, 0, 0, 0.10);
+    --border-strong: rgba(0, 0, 0, 0.18);
+    --fg: #171717;
+    --fg-dim: #525252;
+    --fg-faint: #8f8f8f;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -83,12 +116,44 @@
     border-radius: 999px;
     background: var(--panel-2);
   }
+  /* Vercel-style segmented theme switcher, pinned to the top-right. */
+  .theme-switcher {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-2);
+  }
+  .theme-switcher button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--fg-faint);
+    cursor: pointer;
+    transition: color .15s ease, background .15s ease;
+  }
+  .theme-switcher button:hover { color: var(--fg-dim); }
+  .theme-switcher button.active {
+    color: var(--fg);
+    background: var(--elevated);
+    border: 1px solid var(--border);
+  }
+  .theme-switcher svg { width: 15px; height: 15px; }
   #hint {
     font-size: 13px;
     line-height: 1.6;
     color: var(--fg-dim);
     margin: 0;
-    max-width: 64ch;
+    width: 100%;
   }
   /* Card groups the framed screen with its status/progress. Transparent so the
      border lives on #stage and hugs the screen with no padding. */
@@ -211,7 +276,7 @@
   .panel-icon { width: 16px; height: 16px; color: var(--fg-faint); flex: none; }
   .panel-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
   .panel .qbtn { width: 100%; justify-content: center; white-space: nowrap; padding: 0 10px; }
@@ -242,6 +307,54 @@
     box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(229, 72, 77, 0.35);
   }
   button.qbtn.active:hover:not(:disabled) { background: rgba(229, 72, 77, 0.14); border-color: var(--accent-hover); }
+  /* Vercel-style toggle switches (used for CRT / ASCII effects). */
+  button.qtoggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    background: var(--panel-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  button.qtoggle:hover:not(:disabled) { background: var(--elevated); border-color: var(--border-strong); }
+  button.qtoggle:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.qtoggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #b692f6; }
+  .qtoggle-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .qtoggle-switch {
+    position: relative;
+    flex: none;
+    box-sizing: border-box;
+    width: 34px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--elevated);
+    border: 1px solid var(--border-strong);
+    transition: background .18s ease, border-color .18s ease;
+  }
+  .qtoggle-knob {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--fg-dim);
+    transition: transform .18s cubic-bezier(.4, .2, .2, 1), background .18s ease;
+  }
+  button.qtoggle.active { border-color: rgba(182, 146, 246, 0.55); color: #cbb6fb; }
+  button.qtoggle.active .qtoggle-switch { background: #b692f6; border-color: #b692f6; }
+  button.qtoggle.active .qtoggle-knob { background: #0a0a0a; transform: translateX(14px); }
   /* Capture buttons (Shot / GIF) read as a distinct green action set. */
   button.qbtn.cap { color: #7ee787; border-color: rgba(126, 231, 135, 0.35); }
   button.qbtn.cap:hover:not(:disabled) { background: rgba(126, 231, 135, 0.08); border-color: rgba(126, 231, 135, 0.6); }
@@ -283,14 +396,14 @@
     padding: 12px 16px;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-left: 2px solid var(--accent);
+    border-left: 2px solid var(--orange);
     border-radius: var(--radius-sm);
     font-size: 13px;
     color: var(--fg-dim);
     cursor: pointer;
     transition: border-color .15s ease, background .15s ease;
   }
-  #protip:hover { background: var(--panel-2); border-color: var(--border-strong); border-left-color: var(--accent); }
+  #protip:hover { background: var(--panel-2); border-color: var(--border-strong); border-left-color: var(--orange); }
   .protip-label {
     flex: none;
     font-family: var(--mono);
@@ -298,7 +411,7 @@
     font-weight: 500;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--accent);
+    color: var(--orange);
   }
   .protip-body { line-height: 1.5; }
   #protip kbd {
@@ -313,8 +426,8 @@
   #protip code {
     font-family: var(--mono);
     font-size: 12px;
-    color: var(--accent-hover);
-    background: rgba(229, 72, 77, 0.10);
+    color: var(--orange-hover);
+    background: var(--orange-soft);
     border-radius: 4px;
     padding: 1px 6px;
   }
@@ -371,12 +484,14 @@
     text-transform: uppercase;
     color: var(--fg-faint);
   }
+  /* Console output reads as a real terminal: always dark with green text,
+     independent of the page theme. */
   #output {
     width: 100%;
     height: 140px;
-    background: var(--panel);
+    background: #0a0a0a;
     color: #7ee787;
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--radius-sm);
     font-family: var(--mono);
     font-size: 12px;
@@ -384,12 +499,190 @@
     padding: 12px 14px;
     resize: vertical;
   }
+
+  /* ===== Anniversary banner ===================================== */
+  #anniv {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin: 0 0 14px;
+    padding: 10px 12px 10px 14px;
+    border: 1px solid rgba(182, 146, 246, 0.45);
+    border-radius: var(--radius);
+    background: linear-gradient(90deg, rgba(124, 58, 237, 0.20), rgba(56, 189, 248, 0.12));
+    color: var(--fg);
+    font-size: 14px;
+  }
+  #anniv.show { display: flex; }
+  #anniv .a-emoji { font-size: 22px; line-height: 1; flex: none; }
+  #anniv .a-text { flex: 1 1 auto; line-height: 1.4; }
+  #anniv .a-text b { color: #cbb6fb; }
+  #anniv .a-actions { display: inline-flex; gap: 8px; flex: none; align-items: center; }
+  #anniv .a-btn {
+    height: 30px; padding: 0 12px;
+    border-radius: 999px; border: 1px solid var(--border-strong);
+    background: var(--panel-2); color: var(--fg);
+    font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  #anniv .a-btn.primary { background: #b692f6; border-color: #b692f6; color: #0a0a0a; }
+  #anniv .a-btn:hover { border-color: #b692f6; }
+  #anniv .a-close {
+    flex: none; width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid transparent; background: transparent; color: var(--fg-dim);
+    font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  #anniv .a-close:hover { background: var(--elevated); color: var(--fg); }
+  @media (max-width: 560px) {
+    #anniv { flex-wrap: wrap; }
+    #anniv .a-text { flex-basis: 100%; }
+  }
+
+  /* Confetti burst (one-shot, dependency-free). */
+  #confetti {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 60; display: none;
+  }
+
+  /* ===== In-stage overlays ===================================== */
+  /* Idle attract overlay (invites a click to start) */
+  #attract { display: none !important; }
+  /* On-screen touch controls (mobile only) */
+  #touch { position: absolute; inset: 0; z-index: 30; display: none; pointer-events: none; }
+  body.has-touch #touch { display: block; }
+  body.has-touch #stage { touch-action: none; }
+  #touch .tc {
+    position: absolute; pointer-events: auto; -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-family: var(--sans); font-weight: 700;
+    background: rgba(10, 10, 12, 0.42); border: 1px solid rgba(255, 255, 255, 0.28);
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
+  #touch .tc.pressed { background: rgba(182, 146, 246, 0.55); border-color: #b692f6; }
+  #touch .dpad { position: absolute; left: 12px; bottom: 12px; width: 144px; height: 144px; }
+  #touch .dpad .tc { width: 46px; height: 46px; border-radius: 10px; font-size: 18px; }
+  #touch .dpad .d-up { left: 49px; top: 0; }
+  #touch .dpad .d-down { left: 49px; bottom: 0; }
+  #touch .dpad .d-left { left: 0; top: 49px; }
+  #touch .dpad .d-right { right: 0; top: 49px; }
+  #touch .btns { position: absolute; right: 12px; bottom: 12px; }
+  #touch .btns .tc { border-radius: 50%; }
+  #touch .b-fire { position: absolute; right: 0; bottom: 6px; width: 74px; height: 74px; font-size: 13px; }
+  #touch .b-jump { position: absolute; right: 80px; bottom: 14px; width: 56px; height: 56px; font-size: 12px; }
+  #touch .b-enter { position: absolute; right: 18px; bottom: 88px; width: 52px; height: 52px; font-size: 20px; }
+  #touch .b-esc {
+    position: absolute; right: 10px; top: 8px; width: 46px; height: 30px;
+    border-radius: 8px; font-size: 12px; letter-spacing: 0.08em;
+  }
+
+  /* ===== Social share menu ===================================== */
+  #share-menu {
+    position: fixed; inset: 0; z-index: 70;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+  }
+  #share-menu.show { display: flex; }
+  #share-menu .sm-card {
+    width: min(320px, 90vw);
+    background: var(--panel); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); padding: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.65);
+  }
+  #share-menu .sm-title {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--fg-faint); padding: 4px 6px 2px;
+  }
+  #share-menu .sm-close {
+    width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
+    background: transparent; color: var(--fg-dim); font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  #share-menu .sm-close:hover { background: var(--elevated); color: var(--fg); }
+  #share-menu .sm-item {
+    display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--fg);
+    font-family: var(--sans); font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
+  }
+  #share-menu .sm-item:hover { background: var(--elevated); border-color: var(--border-strong); }
+  #share-menu .sm-ico {
+    width: 22px; flex: none; text-align: center; font-weight: 700;
+    font-family: var(--mono); color: var(--fg-dim);
+  }
+
+  /* ===== Death / share-your-run prompt (above the protip) ====== */
+  #deathshare {
+    display: none;
+    align-items: center; gap: 12px;
+    margin: 0 0 14px; padding: 12px 14px;
+    border: 1px solid rgba(229, 72, 77, 0.5);
+    border-radius: var(--radius);
+    background: linear-gradient(90deg, rgba(229, 72, 77, 0.16), rgba(124, 58, 237, 0.10));
+    color: var(--fg); font-size: 14px;
+  }
+  #deathshare.show { display: flex; }
+  #deathshare .ds-skull { font-size: 22px; line-height: 1; flex: none; }
+  #deathshare .ds-text { flex: 1 1 auto; line-height: 1.4; }
+  #deathshare .ds-text b { color: #ff9aa2; }
+  #deathshare .ds-text .ds-seed { color: #cbb6fb; font-family: var(--mono); }
+  #deathshare .ds-share {
+    flex: none; height: 34px; padding: 0 16px; border-radius: 999px;
+    border: 1px solid #b692f6; background: #b692f6; color: #0a0a0a;
+    font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  #deathshare .ds-share:hover { background: #c4a7fb; }
+  #deathshare .ds-close {
+    flex: none; width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid transparent; background: transparent; color: var(--fg-dim);
+    font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  #deathshare .ds-close:hover { background: var(--elevated); color: var(--fg); }
+  @media (max-width: 560px) {
+    #deathshare { flex-wrap: wrap; }
+    #deathshare .ds-text { flex-basis: 100%; }
+  }
 </style>
 </head>
 <body>
+<canvas id="confetti"></canvas>
+<div id="share-menu" hidden>
+  <div class="sm-card" role="menu" aria-label="Share Quake">
+    <div class="sm-title"><span>Share</span><button class="sm-close" id="sm-close" type="button" aria-label="Close">&times;</button></div>
+    <button class="sm-item" data-net="x" type="button"><span class="sm-ico">&#120143;</span> X (Twitter)</button>
+    <button class="sm-item" data-net="bluesky" type="button"><span class="sm-ico">&#9729;</span> Bluesky</button>
+    <button class="sm-item" data-net="reddit" type="button"><span class="sm-ico">&#128279;</span> Reddit</button>
+    <button class="sm-item" data-net="hn" type="button"><span class="sm-ico">Y</span> Hacker News</button>
+    <button class="sm-item" data-net="linkedin" type="button"><span class="sm-ico">in</span> LinkedIn</button>
+    <button class="sm-item" data-net="facebook" type="button"><span class="sm-ico">f</span> Facebook</button>
+    <button class="sm-item" data-net="copy" type="button"><span class="sm-ico">&#128203;</span> Copy link</button>
+  </div>
+</div>
 <div id="wrap">
+  <div id="anniv" role="status">
+    <span class="a-emoji">&#127874;</span>
+    <span class="a-text"><b>Quake turns 30 today.</b> Released June&nbsp;22,&nbsp;1996 &mdash; now recompiled to WebAssembly and playable right here, no install.</span>
+    <span class="a-actions">
+      <button class="a-btn primary" id="anniv-play" type="button">&#9654; Play</button>
+      <button class="a-btn" id="anniv-share" type="button">Share</button>
+    </span>
+    <button class="a-close" id="anniv-close" type="button" aria-label="Dismiss">&times;</button>
+  </div>
   <header>
-    <h1><span class="mark"></span>QUAKLIKE</h1>
+    <h1><span class="mark"></span>QUAKELIKE</h1>
+    <div class="theme-switcher" role="radiogroup" aria-label="Theme">
+      <button type="button" data-theme-choice="system" title="System theme" aria-label="System theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+      </button>
+      <button type="button" data-theme-choice="light" title="Light theme" aria-label="Light theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>
+      </button>
+      <button type="button" data-theme-choice="dark" title="Dark theme" aria-label="Dark theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+    </div>
   </header>
   <p id="hint">An experimental Quake-like experience in the browser built with GitHub Copilot from the original Quake source code.</p>
   <div class="card">
@@ -397,9 +690,29 @@
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
       <div id="crt-overlay"></div>
       <canvas id="ascii-overlay"></canvas>
+      <div id="touch" aria-hidden="true">
+        <div class="dpad">
+          <div class="tc d-up" data-key="128">&#9650;</div>
+          <div class="tc d-down" data-key="129">&#9660;</div>
+          <div class="tc d-left" data-key="44">&#9664;</div>
+          <div class="tc d-right" data-key="46">&#9654;</div>
+        </div>
+        <div class="btns">
+          <div class="tc b-fire" data-key="200">FIRE</div>
+          <div class="tc b-jump" data-key="32">JUMP</div>
+          <div class="tc b-enter" data-key="13">&#9166;</div>
+        </div>
+        <div class="tc b-esc" data-key="27">ESC</div>
+      </div>
     </div>
     <div id="status">Loading&hellip;</div>
     <progress hidden id="progress" max="100" value="0"></progress>
+  </div>
+  <div id="deathshare">
+    <span class="ds-skull">&#128128;</span>
+    <span class="ds-text" id="deathshare-text"></span>
+    <button class="ds-share" id="deathshare-share" type="button">Share your run</button>
+    <button class="ds-close" id="deathshare-close" type="button" aria-label="Dismiss">&times;</button>
   </div>
   <div id="protip" title="Click for another tip">
     <span class="protip-label">ProTip</span>
@@ -427,12 +740,19 @@
       </div>
       <div class="panel-grid">
         <span id="fx">
-          <button class="qbtn" disabled id="crt-btn" type="button">&#128250; CRT</button>
-          <button class="qbtn" disabled id="ascii-btn" type="button">&#9636; ASCII</button>
+          <button class="qtoggle" disabled id="crt-btn" type="button" role="switch" aria-checked="false">
+            <span class="qtoggle-label">&#128250; CRT</span>
+            <span class="qtoggle-switch" aria-hidden="true"><span class="qtoggle-knob"></span></span>
+          </button>
+          <button class="qtoggle" disabled id="ascii-btn" type="button" role="switch" aria-checked="false">
+            <span class="qtoggle-label">&#9636; ASCII</span>
+            <span class="qtoggle-switch" aria-hidden="true"><span class="qtoggle-knob"></span></span>
+          </button>
         </span>
         <span id="capture">
           <button class="qbtn cap" disabled id="shot-btn" type="button" title="Save a PNG screenshot">&#128247; Shot</button>
           <button class="qbtn cap" disabled id="gif-btn" type="button" title="Record an animated GIF clip">&#127916; GIF</button>
+          <button class="qbtn" disabled id="share-btn" type="button" title="Share this page">&#128279; Share</button>
         </span>
       </div>
     </div>
@@ -585,12 +905,9 @@
       { cmd: 'notarget', desc: 'monsters no longer notice you' },
       { cmd: 'impulse 9', desc: 'every weapon, full ammo, and both keys' },
       { cmd: 'impulse -1', desc: 'grab an instant Quad Damage' },
-      { cmd: 'impulse 11', desc: 'claim a Rune \u2014 repeat for all four' },
-      { cmd: 'give 7', desc: 'hand yourself the Rocket Launcher (try 1\u20138)' },
       { cmd: 'give H 100', desc: 'top your health back up to 100' },
       { cmd: 'give C 100', desc: 'load 100 Cells for the Thunderbolt' },
       { cmd: 'give R 50', desc: 'stockpile 50 Rockets' },
-      { cmd: 'kill', desc: 'respawn instantly by restarting the level' },
       { cmd: 'skill 3', desc: 'crank the difficulty up to Nightmare' },
       { cmd: 'r_fullbright 1', desc: 'light up every surface in the map' },
       { cmd: 'r_draworder 1', desc: 'x-ray vision \u2014 see through brushes' },
@@ -598,7 +915,8 @@
       { cmd: 'r_drawviewmodel 0', desc: 'hide your weapon for a clean view' },
       { cmd: 'fov 110', desc: 'widen your field of view' },
       { cmd: 'crosshair 1', desc: 'switch on a centre crosshair' },
-      { cmd: 'gamma 0.5', desc: 'brighten up a gloomy level' }
+      { cmd: 'gamma 0.5', desc: 'brighten up a gloomy level' },
+      { cmd: 'copilot', desc: 'have GitHub Copilot assist you' }
     ];
     var box = document.getElementById('protip');
     var cmdEl = document.getElementById('protip-cmd');
@@ -614,6 +932,46 @@
     show();
     box.addEventListener('click', show);
     setInterval(show, 12000);
+  })();
+
+  // ---- Theme switcher (Vercel-style: System / Light / Dark) ----
+  (function () {
+    var KEY = 'quakelike-theme';
+    var root = document.documentElement;
+    var buttons = Array.prototype.slice.call(
+      document.querySelectorAll('.theme-switcher [data-theme-choice]'));
+    var media = window.matchMedia('(prefers-color-scheme: light)');
+
+    function stored() {
+      try { return localStorage.getItem(KEY) || 'system'; }
+      catch (e) { return 'system'; }
+    }
+
+    function apply(choice) {
+      var resolved = choice === 'system'
+        ? (media.matches ? 'light' : 'dark')
+        : choice;
+      root.setAttribute('data-theme', resolved);
+      buttons.forEach(function (b) {
+        var active = b.dataset.themeChoice === choice;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-checked', active ? 'true' : 'false');
+      });
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var choice = b.dataset.themeChoice;
+        try { localStorage.setItem(KEY, choice); } catch (e) {}
+        apply(choice);
+      });
+    });
+
+    media.addEventListener('change', function () {
+      if (stored() === 'system') apply('system');
+    });
+
+    apply(stored());
   })();
 
   // ---- Video filters (palette remaps in the engine) ----
@@ -654,6 +1012,7 @@
     btn.addEventListener('click', function () {
       var on = stage.classList.toggle('crt');
       btn.classList.toggle('active', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
       canvasElement.focus();
     });
     var prevInit = Module.onRuntimeInitialized;
@@ -714,6 +1073,7 @@
     btn.addEventListener('click', function () {
       on = !on;
       btn.classList.toggle('active', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
       stage.classList.toggle('ascii', on);
       Module.ccall('Web_AsciiEnable', null, ['number'], [on ? 1 : 0]);
       if (on) {
@@ -1095,6 +1455,340 @@
       if (block.length) flushBlock();
       out.push(0); // block terminator
     }
+  })();
+
+  // =====================================================================
+  //  Anniversary / Share / Mobile / Attract / Speedrun add-ons
+  //  (engine bridges: Web_KeyEvent, Web_LookDelta, Web_Command,
+  //   Web_IsPlaying, Web_LevelTime, Web_Intermission, Web_MapName)
+  // =====================================================================
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var stage  = document.getElementById('stage');
+
+    // --- engine readiness + thin ccall wrappers ---
+    var ready = false;
+    function call(name, ret, sig, args) {
+      if (!ready) return null;
+      try { return Module.ccall(name, ret, sig, args); }
+      catch (e) { return null; }
+    }
+    function ek(key, down)  { call('Web_KeyEvent', null, ['number', 'number'], [key, down ? 1 : 0]); }
+    function look(dx, dy)   { call('Web_LookDelta', null, ['number', 'number'], [dx, dy]); }
+    function cmd(s)         { call('Web_Command', null, ['string'], [s]); }
+    function isPlaying()    { return !!call('Web_IsPlaying', 'number', [], []); }
+    function levelTime()    { return call('Web_LevelTime', 'number', [], []) || 0; }
+    function intermission() { return !!call('Web_Intermission', 'number', [], []); }
+    function mapName()      { return call('Web_MapName', 'string', [], []) || ''; }
+    function health()       { return call('Web_Health', 'number', [], []) || 0; }
+    function kills()        { return call('Web_Kills', 'number', [], []) || 0; }
+    function isProcgen()    { return !!call('Web_IsProcgen', 'number', [], []); }
+    function procgenSeed()  { return (call('Web_ProcgenSeed', 'number', [], []) >>> 0); }
+
+    // --- toast (reuse the capture-toast element) ---
+    var toastEl = document.getElementById('capture-toast');
+    var toastT;
+    function qToast(msg) {
+      if (!toastEl) return;
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastT);
+      toastT = setTimeout(function () { toastEl.classList.remove('show'); }, 2200);
+    }
+
+    // --- jump straight into a level (bypasses menus; great on mobile) ---
+    function startGame() {
+      var b = document.getElementById('anniv');
+      if (b) b.classList.remove('show');
+      if (!ready) return;
+      cmd('map start');
+      setTimeout(function () { try { canvas.focus(); } catch (e) {} }, 50);
+    }
+
+    // --- one-shot confetti (no dependencies) ---
+    function fireConfetti() {
+      var c = document.getElementById('confetti');
+      if (!c) return;
+      var ctx = c.getContext('2d');
+      var W = c.width = window.innerWidth;
+      var H = c.height = window.innerHeight;
+      c.style.display = 'block';
+      var colors = ['#b692f6', '#7dd3fc', '#ff77c8', '#ffd36e', '#7ee787', '#f2555a'];
+      var parts = [];
+      for (var i = 0; i < 150; i++) {
+        parts.push({
+          x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
+          vx: (Math.random() - 0.5) * 1.8, vy: 2 + Math.random() * 3.6,
+          s: 4 + Math.random() * 5, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3,
+          col: colors[(Math.random() * colors.length) | 0]
+        });
+      }
+      var start = performance.now(), dur = 2600;
+      function frame(t) {
+        var el = t - start;
+        ctx.clearRect(0, 0, W, H);
+        for (var i = 0; i < parts.length; i++) {
+          var p = parts[i];
+          p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.rot += p.vr;
+          ctx.save();
+          ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.globalAlpha = Math.max(0, 1 - el / dur);
+          ctx.fillStyle = p.col;
+          ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
+          ctx.restore();
+        }
+        if (el < dur) requestAnimationFrame(frame);
+        else { ctx.clearRect(0, 0, W, H); c.style.display = 'none'; }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // --- shareable URL state (filter + CRT + ASCII) ---
+    var QState = (function () {
+      var filterBtns = Array.prototype.slice.call(document.querySelectorAll('.filter-btn'));
+      var crtBtn = document.getElementById('crt-btn');
+      var asciiBtn = document.getElementById('ascii-btn');
+      function curFilter() {
+        var a = document.querySelector('.filter-btn.active');
+        return a ? +a.dataset.filter : 0;
+      }
+      function serialize() {
+        var parts = [];
+        var f = curFilter();
+        if (f) parts.push('f=' + f);
+        if (crtBtn.classList.contains('active')) parts.push('crt=1');
+        if (asciiBtn.classList.contains('active')) parts.push('ascii=1');
+        try {
+          history.replaceState(null, '', parts.length ? '#' + parts.join('&') : location.pathname + location.search);
+        } catch (e) {}
+      }
+      function parse() {
+        var o = { f: 0, crt: false, ascii: false };
+        (location.hash || '').replace(/^#/, '').split('&').forEach(function (kv) {
+          var p = kv.split('=');
+          if (p[0] === 'f') o.f = +p[1] || 0;
+          else if (p[0] === 'crt') o.crt = p[1] === '1';
+          else if (p[0] === 'ascii') o.ascii = p[1] === '1';
+        });
+        return o;
+      }
+      function applyFromHash() {
+        var o = parse();
+        if (o.f > 0 && filterBtns[o.f]) filterBtns[o.f].click();
+        if (o.crt && !crtBtn.classList.contains('active')) crtBtn.click();
+        if (o.ascii && !asciiBtn.classList.contains('active')) asciiBtn.click();
+      }
+      function watch(el) { if (el) el.addEventListener('click', function () { setTimeout(serialize, 0); }); }
+      filterBtns.forEach(watch); watch(crtBtn); watch(asciiBtn);
+      return { applyFromHash: applyFromHash, serialize: serialize, current: function () {
+        var bits = [];
+        var f = document.querySelector('.filter-btn.active');
+        if (f && +f.dataset.filter) bits.push(f.textContent.trim());
+        if (crtBtn.classList.contains('active')) bits.push('CRT');
+        if (asciiBtn.classList.contains('active')) bits.push('ASCII');
+        return bits;
+      } };
+    })();
+
+    // --- enable engine-dependent UI once the runtime is up ---
+    var prevInit = Module.onRuntimeInitialized;
+    Module.onRuntimeInitialized = function () {
+      if (prevInit) prevInit();
+      ready = true;
+      var sb = document.getElementById('share-btn');
+      if (sb) sb.disabled = false;
+      QState.applyFromHash();
+    };
+
+    // --- Social share menu (X / Bluesky / Reddit / HN / LinkedIn / Facebook) ---
+    var ShareMenu = (function () {
+      var menu = document.getElementById('share-menu');
+      var custom = null;
+
+      function copyLink(url) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(
+            function () { qToast('Link copied \u2713'); },
+            function () { qToast(url); });
+        } else { qToast(url); }
+      }
+
+      function payload() {
+        if (custom) return custom;
+        QState.serialize();
+        var bits = QState.current();
+        var mode = bits.length ? ' (' + bits.join(' + ') + ')' : '';
+        return {
+          title: 'Quake on the Web',
+          text: 'Quake turns 30 \u2014 play the 1996 classic in your browser' + mode + '. #Quake30',
+          url: location.href
+        };
+      }
+
+      function go(net) {
+        var d = payload();
+        var u = encodeURIComponent(d.url);
+        var t = encodeURIComponent(d.text);
+        if (net === 'copy') { copyLink(d.url); close(); return; }
+        var urls = {
+          x:        'https://twitter.com/intent/tweet?text=' + t + '&url=' + u,
+          bluesky:  'https://bsky.app/intent/compose?text=' + encodeURIComponent(d.text + ' ' + d.url),
+          reddit:   'https://www.reddit.com/submit?url=' + u + '&title=' + t,
+          hn:       'https://news.ycombinator.com/submitlink?u=' + u + '&t=' + encodeURIComponent(d.title),
+          linkedin: 'https://www.linkedin.com/sharing/share-offsite/?url=' + u,
+          facebook: 'https://www.facebook.com/sharer/sharer.php?u=' + u
+        };
+        if (urls[net]) window.open(urls[net], '_blank', 'noopener');
+        close();
+      }
+
+      function open(customData) {
+        custom = customData || null;
+        menu.hidden = false;
+        // force reflow so the transition/display applies
+        menu.classList.add('show');
+      }
+      function close() {
+        menu.classList.remove('show');
+        menu.hidden = true;
+        custom = null;
+      }
+
+      Array.prototype.slice.call(menu.querySelectorAll('.sm-item')).forEach(function (b) {
+        b.addEventListener('click', function () { go(b.dataset.net); });
+      });
+      document.getElementById('sm-close').addEventListener('click', close);
+      menu.addEventListener('click', function (e) { if (e.target === menu) close(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && menu.classList.contains('show')) close();
+      });
+
+      return { open: open, close: close };
+    })();
+
+    (function () {
+      var btn = document.getElementById('share-btn');
+      if (btn) btn.addEventListener('click', function () { ShareMenu.open(); });
+      var aShare = document.getElementById('anniv-share');
+      if (aShare) aShare.addEventListener('click', function () { ShareMenu.open(); });
+    })();
+
+    // --- Anniversary banner + confetti ---
+    (function () {
+      var banner = document.getElementById('anniv');
+      var KEY = 'q30-banner-dismissed';
+      var dismissed = false;
+      try { dismissed = localStorage.getItem(KEY) === '1'; } catch (e) {}
+      if (!dismissed) {
+        banner.classList.add('show');
+        fireConfetti();
+      }
+      document.getElementById('anniv-close').addEventListener('click', function () {
+        banner.classList.remove('show');
+        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+      });
+      document.getElementById('anniv-play').addEventListener('click', startGame);
+    })();
+
+    // --- Death prompt: encourage sharing your run on social ---
+    (function () {
+      var box = document.getElementById('deathshare');
+      var textEl = document.getElementById('deathshare-text');
+      var shareBtn = document.getElementById('deathshare-share');
+      var closeBtn = document.getElementById('deathshare-close');
+      var wasAlive = false, deadShown = false, lifeStart = 0;
+      var lastRun = null;
+
+      function fmtDuration(sec) {
+        sec = Math.max(0, Math.round(sec));
+        var m = Math.floor(sec / 60), s = sec % 60;
+        if (m > 0) return m + ' min ' + s + ' sec';
+        return s + ' sec';
+      }
+
+      function showPrompt(k, secs) {
+        var baddies = k === 1 ? 'baddie' : 'baddies';
+        var seedText = '', proc = isProcgen();
+        var seed = proc ? procgenSeed() : 0;
+        var html = 'You died after fragging <b>' + k + ' ' + baddies + '</b> and surviving <b>' +
+                   fmtDuration(secs) + '</b>.';
+        if (proc) {
+          html += ' That was a procgen dungeon &mdash; <span class="ds-seed">seed ' + seed + '</span>.';
+        }
+        html += ' Brag about it!';
+        textEl.innerHTML = html;
+
+        var runLine = 'I fragged ' + k + ' ' + baddies + ' and survived ' + fmtDuration(secs) +
+                      ' in browser Quake' +
+                      (proc ? ' (procgen dungeon, seed ' + seed + ')' : '') +
+                      '! The 1996 classic, 30 years on. #Quake30';
+        lastRun = { title: 'Quake on the Web', text: runLine, url: location.href };
+        box.classList.add('show');
+      }
+      function hidePrompt() { box.classList.remove('show'); }
+
+      shareBtn.addEventListener('click', function () { ShareMenu.open(lastRun); });
+      closeBtn.addEventListener('click', hidePrompt);
+
+      setInterval(function () {
+        if (!ready) return;
+        if (!isPlaying()) { wasAlive = false; deadShown = false; hidePrompt(); return; }
+        var hp = health();
+        if (hp > 0) {
+          if (!wasAlive) { wasAlive = true; lifeStart = Date.now(); }
+          if (deadShown) { deadShown = false; hidePrompt(); }
+        } else {
+          if (wasAlive && !deadShown) {
+            deadShown = true;
+            showPrompt(kills(), (Date.now() - lifeStart) / 1000);
+          }
+          wasAlive = false;
+        }
+      }, 300);
+    })();
+
+    // --- On-screen touch controls (mobile only) ---
+    (function () {
+      var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) ||
+                     window.matchMedia('(pointer: coarse)').matches;
+      if (!hasTouch) return;
+      document.body.classList.add('has-touch');
+      var touch = document.getElementById('touch');
+
+      Array.prototype.slice.call(touch.querySelectorAll('.tc')).forEach(function (el) {
+        var key = +el.dataset.key;
+        function down(e) { e.preventDefault(); e.stopPropagation(); el.classList.add('pressed'); ek(key, 1); }
+        function up(e)   { e.preventDefault(); e.stopPropagation(); el.classList.remove('pressed'); ek(key, 0); }
+        el.addEventListener('touchstart', down, { passive: false });
+        el.addEventListener('touchend', up, { passive: false });
+        el.addEventListener('touchcancel', up, { passive: false });
+      });
+
+      // Drag anywhere on the stage (not on a control) to look around.
+      var lookId = null, lx = 0, ly = 0;
+      stage.addEventListener('touchstart', function (e) {
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var t = e.changedTouches[i];
+          if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; }
+        }
+      }, { passive: true });
+      stage.addEventListener('touchmove', function (e) {
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var t = e.changedTouches[i];
+          if (t.identifier === lookId) {
+            look((t.clientX - lx) * 0.22, (t.clientY - ly) * 0.18);
+            lx = t.clientX; ly = t.clientY;
+            e.preventDefault();
+          }
+        }
+      }, { passive: false });
+      function endLook(e) {
+        for (var i = 0; i < e.changedTouches.length; i++)
+          if (e.changedTouches[i].identifier === lookId) lookId = null;
+      }
+      stage.addEventListener('touchend', endLook, { passive: true });
+      stage.addEventListener('touchcancel', endLook, { passive: true });
+    })();
   })();
 </script>
 {{{ SCRIPT }}}

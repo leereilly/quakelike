@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 
+#include <emscripten.h>
 #include <stdio.h>
 #include <sys/stat.h>
 
@@ -190,6 +191,7 @@ static int		pg_hull1_root, pg_hull2_root;	// model headnode[1..2]
 
 // deterministic RNG (LCG)
 static unsigned int	pg_seed;
+static unsigned int	pg_last_seed;	// original seed of the current dungeon (for sharing)
 static int pg_rand (void)
 {
 	pg_seed = pg_seed * 1103515245u + 12345u;
@@ -1063,6 +1065,7 @@ static int PG_Generate (unsigned int seed)
 	unsigned char	*bsp;
 
 	pg_seed = seed;
+	pg_last_seed = seed;
 
 	PG_Reset ();
 	if (!PG_LoadTextures ())
@@ -1195,4 +1198,17 @@ void Procgen_Init (void)
 {
 	Cmd_AddCommand ("procgen", Procgen_f);
 	Cmd_AddCommand ("procgen_next", Procgen_Next_f);
+}
+
+// --- Web/JS bridges: is the current level a procgen dungeon, and its seed? ---
+EMSCRIPTEN_KEEPALIVE
+int Web_IsProcgen (void)
+{
+	return (sv.active && strcmp (sv.name, "procgen") == 0) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+unsigned int Web_ProcgenSeed (void)
+{
+	return pg_last_seed;
 }

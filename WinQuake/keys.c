@@ -162,9 +162,18 @@ void Key_Console (int key)
 	
 	if (key == K_ENTER)
 	{
+		char	*typed;
+
 		Cbuf_AddText (key_lines[edit_line]+1);	// skip the >
 		Cbuf_AddText ("\n");
-		Con_Printf ("%s\n",key_lines[edit_line]);
+
+		// The copilot easter egg is supposed to leave no trace in the
+		// console, so don't echo the "]copilot" command line for it.
+		typed = key_lines[edit_line] + 1;
+		while (*typed == ' ')
+			typed++;
+		if (Q_strcasecmp (typed, "copilot") && Q_strcasecmp (typed, "copilopt"))
+			Con_Printf ("%s\n",key_lines[edit_line]);
 		edit_line = (edit_line + 1) & 31;
 		history_line = edit_line;
 		key_lines[edit_line][0] = ']';

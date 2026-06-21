@@ -72,8 +72,8 @@ LDFLAGS=(
 	-sSTACK_SIZE=5MB
 	-sFORCE_FILESYSTEM=1
 	-sEXIT_RUNTIME=0
-	-sEXPORTED_FUNCTIONS=_main,_Web_SetFilter,_Web_AsciiEnable,_Web_GetAscii,_Web_AsciiCols,_Web_AsciiRows
-	-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8
+	-sEXPORTED_FUNCTIONS=_main,_Web_SetFilter,_Web_AsciiEnable,_Web_GetAscii,_Web_AsciiCols,_Web_AsciiRows,_Web_KeyEvent,_Web_LookDelta,_Web_Command,_Web_LevelTime,_Web_Intermission,_Web_MapName,_Web_IsPlaying,_Web_Health,_Web_Kills,_Web_IsProcgen,_Web_ProcgenSeed
+	-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8,UTF8ToString
 	-Wl,--allow-multiple-definition
 	-lidbfs.js
 	--shell-file "$SCRIPT_DIR/shell.html"
@@ -121,5 +121,10 @@ emcc "${CFLAGS[@]}" "${SRC_FILES[@]}" "${LDFLAGS[@]}" -o "$OUT_DIR/index.html"
 
 # A .nojekyll keeps GitHub Pages from mangling the _-prefixed emscripten files.
 touch "$OUT_DIR/.nojekyll"
+
+# Copy static share assets (social-card image for OpenGraph/Twitter unfurls).
+if [ -f "$SCRIPT_DIR/og-image.png" ]; then
+	cp "$SCRIPT_DIR/og-image.png" "$OUT_DIR/og-image.png"
+fi
 
 echo "Done. Output in $OUT_DIR/"

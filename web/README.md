@@ -65,6 +65,32 @@ python3 -m http.server 8000
 - **ESC** for the menu, **`** (backtick) for the console.
 - **Fullscreen**: click the **Fullscreen** button under the canvas, or
   double-click the canvas. Press **ESC** (or F11) to exit.
+- **Touch devices**: on-screen controls appear automatically — a left d-pad
+  (forward/back/strafe), **drag anywhere on the view to look**, and **Fire /
+  Jump / ⏎ / ESC** buttons. Tap **Play** (or the idle overlay) to drop straight
+  into a level. Wired to the engine via `Web_KeyEvent` / `Web_LookDelta` (see
+  `web/in_sdl.c`).
+
+## Share & social (30th-anniversary build)
+
+The web port is tuned to be shared:
+
+- **Link-unfurl cards** — OpenGraph + Twitter Card meta tags in `shell.html`
+  give a `summary_large_image` preview on HN/Reddit/X/Discord/Slack. The card is
+  `web/og-image.png` (1200×630); `build.sh` copies it into `dist/` and the tags
+  point at `https://leereilly.net/quakelike/og-image.png`.
+- **Social share menu** — the Share button opens a menu with one-click intents
+  for **X, Bluesky, Reddit, Hacker News, LinkedIn, Facebook** plus Copy link,
+  each prefilled with `#Quake30`.
+- **Shareable look** — the active **filter + CRT + ASCII** state is encoded in
+  the URL hash (e.g. `#f=2&crt=1`) and restored on load, so you can share
+  "Quake in Synthwave + CRT" as a link.
+- **Anniversary banner** — a dismissible "Quake turns 30 today" banner with a
+  one-shot confetti burst (state stored in `localStorage`).
+- **Death share prompt** — when you die, a prompt appears above the protip with
+  your run stats (baddies fragged + time survived, plus the procgen seed if it
+  was a generated dungeon) and a **Share your run** button into the social menu.
+
 
 ## Video filters
 
