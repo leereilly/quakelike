@@ -130,7 +130,8 @@ typedef struct {
 #define	PG_MAX_LEAFS		4096
 #define	PG_MAX_CLIPNODES	16384
 #define	PG_MAX_MARKSURF		32768
-#define	PG_ENTSTRING		8192
+#define	PG_ENTSTRING		32768
+#define	PG_MAPBUF_CAP		(2 * 1024 * 1024)	// serialize scratch buffer
 
 typedef struct {
 	pg_plane_t	planes[PG_MAX_PLANES];		int numplanes;
@@ -158,11 +159,13 @@ static pg_build_t	pg;
 // with square pillars rather than being one open hall.
 //=========================================================================
 
-#define	PG_ROOMS	5		// max rooms per axis
+#define	PG_ROOMS_MIN	6		// min rooms per axis (keeps maps large)
+#define	PG_ROOMS_MAX	9		// max rooms per axis
+#define	PG_ROOMS	PG_ROOMS_MAX	// grid is sized for the largest case
 #define	PG_NCELL	(2 * PG_ROOMS - 1)	// interleaved cells per axis
 #define	PG_ROOMMIN	192		// room footprint range (<=256 -> legal extents)
 #define	PG_ROOMMAX	256
-#define	PG_WALLSZ	64		// thickness of walls / depth of passages
+#define	PG_WALLSZ	96		// thickness of walls / depth of passages (corridor throats)
 #define	PG_HMIN		176
 #define	PG_HMAX		224
 
@@ -188,6 +191,28 @@ static qboolean		pg_portal_used;			// transport in flight
 static int		pg_solidleaf;			// shared solid leaf index
 static int		pg_render_root;			// model headnode[0]
 static int		pg_hull1_root, pg_hull2_root;	// model headnode[1..2]
+
+// Doors: a subset of passages become brush submodels (a func_door "*N"). Each
+// door slides straight up out of the way; some are auto-opening, some need a
+// silver/gold key. The plain framed openings (no brush) are the rest.
+#define	PG_MAXDOORS	48
+#define	PG_DOOR_AUTO	0
+#define	PG_DOOR_SILVER	1		// needs item_key1 (silver key)
+#define	PG_DOOR_GOLD	2		// needs item_key2 (gold key)
+typedef struct {
+	int	cx, cy;				// passage cell hosting the door
+	int	type;				// PG_DOOR_*
+	int	submodel;			// bsp model index (1-based)
+} pg_door_t;
+static pg_door_t	pg_doors[PG_MAXDOORS];
+static int		pg_ndoors;
+static pg_model_t	pg_doormodels[PG_MAXDOORS];
+static int		pg_door_emptyleaf;		// shared empty leaf for door exteriors
+static unsigned char	pg_locked[PG_NCELL][PG_NCELL];	// 1 == passage gated by a key
+static int		pg_worldfaces, pg_worldleafs;	// counts before door geometry
+static qboolean		pg_need_silver, pg_need_gold;	// a key of that colour is required
+static int		pg_silverkey_x, pg_silverkey_y;	// world centre of the placed keys
+static int		pg_goldkey_x, pg_goldkey_y;
 
 // deterministic RNG (LCG)
 static unsigned int	pg_seed;
@@ -517,8 +542,8 @@ static void PG_Layout (void)
 {
 	int	gw, gh, rx, ry, steps, i, cx, cy;
 
-	gw = pg_range (2, PG_ROOMS);
-	gh = pg_range (2, PG_ROOMS);
+	gw = pg_range (PG_ROOMS_MIN, PG_ROOMS_MAX);
+	gh = pg_range (PG_ROOMS_MIN, PG_ROOMS_MAX);
 	pg_nx = 2 * gw - 1;
 	pg_ny = 2 * gh - 1;
 
@@ -847,6 +872,280 @@ static void PG_BuildDungeon (void)
 }
 
 //=========================================================================
+// Doors
+//
+// A door is a separate BSP brush model (referenced by a func_door entity as
+// "*N"). It fills one open passage cell from floor to ceiling and, when
+// triggered, slides straight up (angle -1, lip 0) so it clears completely into
+// the solid space above the ceiling. The world clip hulls leave that passage
+// open, so the door alone gates it.
+//=========================================================================
+
+// Six outward-facing box faces. The six box planes (positive unit normals,
+// indexed -X,+X,-Y,+Y,-Z,+Z) are written back into bpl[] so the collision hull
+// can reuse them. Returns the index of the first face.
+static int PG_AddDoorFaces (int x0, int y0, int x1, int y1, int z0, int z1,
+			    int tex, int *bpl)
+{
+	int	first = pg.numfaces;
+	int	tx = pg_tix[tex], ty = pg_tiy[tex], tz = pg_tiz[tex];
+
+	bpl[0] = PG_AddPlane (1,0,0, x0, PG_PLANE_X);	// -X face (visible from -X)
+	PG_AddQuad (bpl[0], 1, tx, x0,y0,z0,  x0,y0,z1,  x0,y1,z1,  x0,y1,z0);
+	bpl[1] = PG_AddPlane (1,0,0, x1, PG_PLANE_X);	// +X face
+	PG_AddQuad (bpl[1], 0, tx, x1,y0,z0,  x1,y1,z0,  x1,y1,z1,  x1,y0,z1);
+	bpl[2] = PG_AddPlane (0,1,0, y0, PG_PLANE_Y);	// -Y face
+	PG_AddQuad (bpl[2], 1, ty, x0,y0,z0,  x1,y0,z0,  x1,y0,z1,  x0,y0,z1);
+	bpl[3] = PG_AddPlane (0,1,0, y1, PG_PLANE_Y);	// +Y face
+	PG_AddQuad (bpl[3], 0, ty, x0,y1,z0,  x0,y1,z1,  x1,y1,z1,  x1,y1,z0);
+	bpl[4] = PG_AddPlane (0,0,1, z0, PG_PLANE_Z);	// -Z face (bottom)
+	PG_AddQuad (bpl[4], 1, tz, x0,y0,z0,  x0,y1,z0,  x1,y1,z0,  x1,y0,z0);
+	bpl[5] = PG_AddPlane (0,0,1, z1, PG_PLANE_Z);	// +Z face (top)
+	PG_AddQuad (bpl[5], 0, tz, x0,y0,z1,  x1,y0,z1,  x1,y1,z1,  x0,y1,z1);
+	return first;
+}
+
+// Render/point-collision hull (hull 0): a node box that is the solid leaf
+// inside the brush and the shared empty leaf outside. Returns the root node.
+static int PG_AddDoorHull0 (const int *bpl,
+			    int x0, int y0, int x1, int y1, int z0, int z1)
+{
+	int	first = pg.numnodes;
+	int	emp = -1 - pg_door_emptyleaf;
+	int	sol = -1 - pg_solidleaf;
+	int	i;
+	// per plane: which child is "inside the box" (continue), and the front/back
+	struct { int front, back; } ch[6];
+
+	ch[0].front = first + 1; ch[0].back  = emp;	// x > x0 -> inside
+	ch[1].front = emp;       ch[1].back  = first + 2;	// x < x1 -> inside
+	ch[2].front = first + 3; ch[2].back  = emp;	// y > y0
+	ch[3].front = emp;       ch[3].back  = first + 4;	// y < y1
+	ch[4].front = first + 5; ch[4].back  = emp;	// z > z0
+	ch[5].front = emp;       ch[5].back  = sol;	// z < z1 -> solid
+
+	for (i = 0; i < 6; i++)
+	{
+		pg_node_t *nd = &pg.nodes[pg.numnodes++];
+		memset (nd, 0, sizeof (*nd));
+		nd->planenum = bpl[i];
+		nd->children[0] = ch[i].front;
+		nd->children[1] = ch[i].back;
+		nd->mins[0]=x0; nd->mins[1]=y0; nd->mins[2]=z0;
+		nd->maxs[0]=x1; nd->maxs[1]=y1; nd->maxs[2]=z1;
+		nd->firstface = 0;
+		nd->numfaces = 0;
+	}
+	return first;
+}
+
+// Collision clip hull (hull 1 or 2): a clipnode box that is SOLID inside the
+// brush (expanded outward by the standard player/monster box) and EMPTY
+// outside, matching how qbsp expands stock door brushes. Returns the root.
+static int PG_AddDoorClip (int h, int x0, int y0, int x1, int y1, int z0, int z1)
+{
+	int	hxy = (h == 0) ? 16 : 32;	// player vs big-monster half width
+	int	topexp = 24;			// origin sits 24 above the floor
+	int	botexp = (h == 0) ? 32 : 64;	// head room below the ceiling
+	int	first = pg.numclipnodes;
+	int	i;
+	struct { float nx, ny, nz, d; int type, front, back; } pl[6];
+
+	pl[0].nx=1;pl[0].ny=0;pl[0].nz=0; pl[0].d=x0-hxy;   pl[0].type=PG_PLANE_X;
+	pl[0].front = first + 1;       pl[0].back  = PG_CONTENTS_EMPTY;
+	pl[1].nx=1;pl[1].ny=0;pl[1].nz=0; pl[1].d=x1+hxy;   pl[1].type=PG_PLANE_X;
+	pl[1].front = PG_CONTENTS_EMPTY; pl[1].back = first + 2;
+	pl[2].nx=0;pl[2].ny=1;pl[2].nz=0; pl[2].d=y0-hxy;   pl[2].type=PG_PLANE_Y;
+	pl[2].front = first + 3;       pl[2].back  = PG_CONTENTS_EMPTY;
+	pl[3].nx=0;pl[3].ny=1;pl[3].nz=0; pl[3].d=y1+hxy;   pl[3].type=PG_PLANE_Y;
+	pl[3].front = PG_CONTENTS_EMPTY; pl[3].back = first + 4;
+	pl[4].nx=0;pl[4].ny=0;pl[4].nz=1; pl[4].d=z0-botexp; pl[4].type=PG_PLANE_Z;
+	pl[4].front = first + 5;       pl[4].back  = PG_CONTENTS_EMPTY;
+	pl[5].nx=0;pl[5].ny=0;pl[5].nz=1; pl[5].d=z1+topexp; pl[5].type=PG_PLANE_Z;
+	pl[5].front = PG_CONTENTS_EMPTY; pl[5].back = PG_CONTENTS_SOLID;
+
+	for (i = 0; i < 6; i++)
+	{
+		pg_clipnode_t *cn = &pg.clipnodes[pg.numclipnodes++];
+		cn->planenum = PG_AddPlane (pl[i].nx, pl[i].ny, pl[i].nz, pl[i].d, pl[i].type);
+		cn->children[0] = pl[i].front;
+		cn->children[1] = pl[i].back;
+	}
+	return first;
+}
+
+// Build all of a door's geometry and fill its submodel record.
+static void PG_EmitDoor (int idx)
+{
+	pg_door_t	*d = &pg_doors[idx];
+	pg_model_t	*m = &pg_doormodels[idx];
+	int		bpl[6];
+	int		x0 = pg_gx[d->cx], x1 = pg_gx[d->cx + 1];
+	int		y0 = pg_gy[d->cy], y1 = pg_gy[d->cy + 1];
+	int		z0 = 0, z1 = pg_height;
+	int		ff;
+
+	if (pg_door_emptyleaf < 0)		// create the shared exterior leaf once
+	{
+		pg_leaf_t *l = &pg.leafs[pg.numleafs++];
+		memset (l, 0, sizeof (*l));
+		l->contents = PG_CONTENTS_EMPTY;
+		l->visofs = -1;
+		pg_door_emptyleaf = pg.numleafs - 1;
+	}
+
+	ff = PG_AddDoorFaces (x0, y0, x1, y1, z0, z1, pg_frame_tex, bpl);
+
+	memset (m, 0, sizeof (*m));
+	m->mins[0]=x0; m->mins[1]=y0; m->mins[2]=z0;
+	m->maxs[0]=x1; m->maxs[1]=y1; m->maxs[2]=z1;
+	m->headnode[0] = PG_AddDoorHull0 (bpl, x0, y0, x1, y1, z0, z1);
+	m->headnode[1] = PG_AddDoorClip (0, x0, y0, x1, y1, z0, z1);
+	m->headnode[2] = PG_AddDoorClip (1, x0, y0, x1, y1, z0, z1);
+	m->headnode[3] = 0;
+	m->visleafs = 0;
+	m->firstface = ff;
+	m->numfaces = 6;
+
+	d->submodel = idx + 1;			// model 0 is the world
+}
+
+// Flood the open rooms reachable from spawn without crossing a locked passage.
+static void PG_ReachableRooms (unsigned char vis[PG_NCELL][PG_NCELL])
+{
+	int	stack[PG_NCELL * PG_NCELL][2];
+	int	sp = 0;
+	int	dx[4] = { -2, 2, 0, 0 };
+	int	dy[4] = { 0, 0, -2, 2 };
+
+	memset (vis, 0, PG_NCELL * PG_NCELL);
+	vis[pg_start_cx][pg_start_cy] = 1;
+	stack[sp][0] = pg_start_cx; stack[sp][1] = pg_start_cy; sp++;
+
+	while (sp > 0)
+	{
+		int cx, cy, i;
+		sp--;
+		cx = stack[sp][0]; cy = stack[sp][1];
+		for (i = 0; i < 4; i++)
+		{
+			int nx = cx + dx[i], ny = cy + dy[i];
+			int mx = cx + dx[i] / 2, my = cy + dy[i] / 2;	// passage cell
+			if (nx < 0 || ny < 0 || nx >= pg_nx || ny >= pg_ny)
+				continue;
+			if (!pg_cellopen[mx][my] || pg_locked[mx][my])
+				continue;		// wall or gated by a key we lack
+			if (!pg_cellopen[nx][ny] || vis[nx][ny])
+				continue;
+			vis[nx][ny] = 1;
+			stack[sp][0] = nx; stack[sp][1] = ny; sp++;
+		}
+	}
+}
+
+// Decide which passages become doors, guarantee the keys stay reachable, and
+// build every door's brush submodel. Call after PG_BuildDungeon.
+static void PG_BuildDoors (void)
+{
+	unsigned char	vis[PG_NCELL][PG_NCELL];
+	int		cx, cy, i;
+	int		krx[PG_NCELL * PG_NCELL], kry[PG_NCELL * PG_NCELL], nk;
+
+	pg_ndoors = 0;
+	pg_door_emptyleaf = -1;
+	pg_need_silver = pg_need_gold = false;
+	memset (pg_locked, 0, sizeof (pg_locked));
+
+	// Decide door placement first so locked passages are known before routing.
+	// Roughly 40% of passages get a door; the rest stay plain framed openings.
+	for (cx = 0; cx < pg_nx && pg_ndoors < PG_MAXDOORS; cx++)
+		for (cy = 0; cy < pg_ny && pg_ndoors < PG_MAXDOORS; cy++)
+		{
+			if (!pg_cellopen[cx][cy])
+				continue;
+			if (((cx & 1) != 0) == ((cy & 1) != 0))
+				continue;		// not a passage (room or corner)
+			if (pg_range (0, 9) >= 4)
+				continue;		// ~60% stay plain framed openings
+			// Skip a passage whose door would share a room corner with an
+			// already-placed door. Two such door brushes touch at that corner,
+			// and stock LinkDoors would link them into one group (objerror'ing
+			// "cross connected doors" when three meet). Keeping every door
+			// isolated lets each spawn its own trigger field and open on touch.
+			{
+				int	j, adj = 0;
+				for (j = 0; j < pg_ndoors; j++)
+					if (abs (pg_doors[j].cx - cx) == 1 &&
+					    abs (pg_doors[j].cy - cy) == 1)
+						{ adj = 1; break; }
+				if (adj)
+					continue;
+			}
+			pg_doors[pg_ndoors].cx = cx;
+			pg_doors[pg_ndoors].cy = cy;
+			pg_doors[pg_ndoors].type = PG_DOOR_AUTO;
+			pg_ndoors++;
+		}
+
+	// Promote up to one silver- and one gold-locked door (randomized per map),
+	// so some doors gate areas behind a key without ever softlocking the map.
+	if (pg_ndoors > 0 && pg_range (0, 1))
+	{
+		i = pg_range (0, pg_ndoors - 1);
+		pg_doors[i].type = PG_DOOR_SILVER;
+		pg_locked[pg_doors[i].cx][pg_doors[i].cy] = 1;
+		pg_need_silver = true;
+	}
+	if (pg_ndoors > 1 && pg_range (0, 1))
+	{
+		for (i = 0; i < 8; i++)		// a few tries to land on an auto door
+		{
+			int j = pg_range (0, pg_ndoors - 1);
+			if (pg_doors[j].type == PG_DOOR_AUTO)
+			{
+				pg_doors[j].type = PG_DOOR_GOLD;
+				pg_locked[pg_doors[j].cx][pg_doors[j].cy] = 1;
+				pg_need_gold = true;
+				break;
+			}
+		}
+	}
+
+	// Keys must sit in a room reachable from spawn without crossing any locked
+	// door, so every dungeon stays clearable.
+	PG_ReachableRooms (vis);
+	nk = 0;
+	for (cx = 0; cx < pg_nx; cx++)
+		for (cy = 0; cy < pg_ny; cy++)
+			if (vis[cx][cy] && !((cx & 1) || (cy & 1)) &&
+			    !(cx == pg_start_cx && cy == pg_start_cy))
+			{
+				krx[nk] = (pg_gx[cx] + pg_gx[cx + 1]) / 2;
+				kry[nk] = (pg_gy[cy] + pg_gy[cy + 1]) / 2;
+				nk++;
+			}
+
+	pg_silverkey_x = pg_goldkey_x = (pg_gx[pg_start_cx] + pg_gx[pg_start_cx + 1]) / 2;
+	pg_silverkey_y = pg_goldkey_y = (pg_gy[pg_start_cy] + pg_gy[pg_start_cy + 1]) / 2;
+	if (nk > 0)
+	{
+		if (pg_need_silver)
+		{
+			int r = pg_range (0, nk - 1);
+			pg_silverkey_x = krx[r]; pg_silverkey_y = kry[r];
+		}
+		if (pg_need_gold)
+		{
+			int r = pg_range (0, nk - 1);
+			pg_goldkey_x = krx[r]; pg_goldkey_y = kry[r];
+		}
+	}
+
+	for (i = 0; i < pg_ndoors; i++)
+		PG_EmitDoor (i);
+}
+
+//=========================================================================
 // Serialization
 //=========================================================================
 
@@ -879,7 +1178,7 @@ static void PG_PlaceEntities (void)
 	static const int mhealth[] = { 30, 25, 200, 75, 80 };
 	char	line[256];
 	int	cx, cy, i;
-	int	rx[128], ry[128], nrooms = 0;
+	int	rx[256], ry[256], nrooms = 0;
 	int	threat = 0;
 	int	sx, sy;
 
@@ -893,7 +1192,7 @@ static void PG_PlaceEntities (void)
 				continue;
 			if (cx == pg_start_cx && cy == pg_start_cy)
 				continue;
-			if (nrooms < 128)
+			if (nrooms < 256)
 			{
 				rx[nrooms] = (pg_gx[cx] + pg_gx[cx + 1]) / 2;
 				ry[nrooms] = (pg_gy[cy] + pg_gy[cy + 1]) / 2;
@@ -973,15 +1272,55 @@ static void PG_PlaceEntities (void)
 	}
 }
 
+// Emit the func_door entities (referencing their brush submodels) and any keys
+// the locked doors need. Keys were already placed in a reachable room.
+static void PG_PlaceDoors (void)
+{
+	char	line[256];
+	int	i;
+
+	for (i = 0; i < pg_ndoors; i++)
+	{
+		// No DOOR_DONT_LINK: that flag makes LinkDoors skip spawning the door's
+		// trigger field, so a plain (non-key) door could never be opened by
+		// walking up to it. Door placement already guarantees no two door
+		// brushes share a room corner, so LinkDoors links each door only to
+		// itself and gives it its own auto-open field. 16 = silver, 8 = gold key.
+		int spawnflags = 0;
+		if (pg_doors[i].type == PG_DOOR_SILVER) spawnflags |= 16;
+		else if (pg_doors[i].type == PG_DOOR_GOLD) spawnflags |= 8;
+		// angle -1 = slide straight up; lip 0 = clear fully into the ceiling
+		sprintf (line,
+			"{\n\"classname\" \"func_door\"\n\"model\" \"*%i\"\n"
+			"\"angle\" \"-1\"\n\"lip\" \"0\"\n\"speed\" \"140\"\n\"wait\" \"4\"\n"
+			"\"spawnflags\" \"%i\"\n}\n",
+			pg_doors[i].submodel, spawnflags);
+		PG_EntCat (line);
+	}
+
+	if (pg_need_silver)
+	{
+		sprintf (line, "{\n\"classname\" \"item_key1\"\n\"origin\" \"%i %i %i\"\n}\n",
+			pg_silverkey_x, pg_silverkey_y, 24);
+		PG_EntCat (line);
+	}
+	if (pg_need_gold)
+	{
+		sprintf (line, "{\n\"classname\" \"item_key2\"\n\"origin\" \"%i %i %i\"\n}\n",
+			pg_goldkey_x, pg_goldkey_y, 24);
+		PG_EntCat (line);
+	}
+}
+
 // Build the entity string and return the finished BSP image. Caller frees.
 static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 {
-	pg_model_t	model;
+	pg_model_t	models[1 + PG_MAXDOORS];
+	pg_model_t	*model = &models[0];
 	char		line[256];
 	unsigned char	*buf;
 	pg_header_t	*hdr;
-	int		ofs;
-	int		cap;
+	int		ofs, i, nmodels;
 
 	// entities
 	pg.entlen = 0;
@@ -990,24 +1329,29 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	sprintf (line, "{\n\"classname\" \"info_player_start\"\n\"origin\" \"%i %i %i\"\n\"angle\" \"90\"\n}\n", px, py, pz);
 	PG_EntCat (line);
 	PG_PlaceEntities ();
+	PG_PlaceDoors ();
 
-	// one world model
-	memset (&model, 0, sizeof (model));
-	model.mins[0]=-2048; model.mins[1]=-2048; model.mins[2]=-2048;
-	model.maxs[0]= 2048; model.maxs[1]= 2048; model.maxs[2]= 2048;
-	model.headnode[0] = pg_render_root;	// render root node
-	model.headnode[1] = pg_hull1_root;	// hull1 clipnode root
-	model.headnode[2] = pg_hull2_root;	// hull2 clipnode root
-	model.headnode[3] = 0;
-	model.visleafs = pg.numleafs - 1;	// excluding solid leaf 0
-	model.firstface = 0;
-	model.numfaces = pg.numfaces;
+	// world model (0) followed by one brush submodel per door
+	memset (model, 0, sizeof (*model));
+	model->mins[0]=-4096; model->mins[1]=-4096; model->mins[2]=-4096;
+	model->maxs[0]= 4096; model->maxs[1]= 4096; model->maxs[2]= 4096;
+	model->headnode[0] = pg_render_root;	// render root node
+	model->headnode[1] = pg_hull1_root;	// hull1 clipnode root
+	model->headnode[2] = pg_hull2_root;	// hull2 clipnode root
+	model->headnode[3] = 0;
+	model->visleafs = pg_worldleafs - 1;	// excluding solid leaf 0, excluding doors
+	model->firstface = 0;
+	model->numfaces = pg_worldfaces;	// world faces only; door faces follow
 
-	cap = 512 * 1024;
-	buf = malloc (cap);
+	for (i = 0; i < pg_ndoors; i++)
+		models[1 + i] = pg_doormodels[i];
+	nmodels = 1 + pg_ndoors;
+
+	*out_len = 0;
+	buf = malloc (PG_MAPBUF_CAP);
 	if (!buf)
 		return NULL;
-	memset (buf, 0, cap);
+	memset (buf, 0, PG_MAPBUF_CAP);
 	hdr = (pg_header_t *)buf;
 	hdr->version = PG_BSPVERSION;
 
@@ -1026,7 +1370,7 @@ static unsigned char *PG_Serialize (int *out_len, int px, int py, int pz)
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_MARKSURFACES], pg.marksurf, pg.nummarksurf * sizeof (unsigned short));
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_EDGES], pg.edges, pg.numedges * sizeof (pg_edge_t));
 	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_SURFEDGES], pg.surfedges, pg.numsurfedges * sizeof (int));
-	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_MODELS], &model, sizeof (model));
+	ofs = PG_PutLump (buf, ofs, &hdr->lumps[PG_LUMP_MODELS], models, nmodels * sizeof (pg_model_t));
 
 	*out_len = ofs;
 	return buf;
@@ -1076,6 +1420,9 @@ static int PG_Generate (unsigned int seed)
 	PG_SetupTexinfos ();
 	PG_Layout ();
 	PG_BuildDungeon ();
+	pg_worldfaces = pg.numfaces;	// door geometry is appended after the world
+	pg_worldleafs = pg.numleafs;
+	PG_BuildDoors ();
 
 	// spawn in the middle of the starting cell
 	px = (pg_gx[pg_start_cx] + pg_gx[pg_start_cx + 1]) / 2;
@@ -1211,4 +1558,55 @@ EMSCRIPTEN_KEEPALIVE
 unsigned int Web_ProcgenSeed (void)
 {
 	return pg_last_seed;
+}
+
+// Serialize the current dungeon's layout for the JS minimap overlay. The buffer
+// is a flat int32 array drawn straight from the generator's cell grid (the same
+// data the BSP was built from), so the map reflects the real geometry:
+//   [0] = total ints written
+//   [1..4] = world bounds (minx, miny, maxx, maxy)
+//   [5..6] = spawn centre (x, y)
+//   [7]    = portal present (0/1)
+//   [8..9] = portal world centre (x, y)
+//   then one (x0,y0,x1,y1) rect per open (walkable) cell.
+static int pg_mapbuf[16 + PG_NCELL * PG_NCELL * 4];
+
+EMSCRIPTEN_KEEPALIVE
+int *Web_ProcgenMap (void)
+{
+	int	cx, cy, n;
+	const int cap = (int)(sizeof (pg_mapbuf) / sizeof (pg_mapbuf[0]));
+
+	if (pg_nx <= 0 || pg_ny <= 0)
+	{
+		pg_mapbuf[0] = 0;
+		return pg_mapbuf;
+	}
+
+	pg_mapbuf[1] = pg_gx[0];
+	pg_mapbuf[2] = pg_gy[0];
+	pg_mapbuf[3] = pg_gx[pg_nx];
+	pg_mapbuf[4] = pg_gy[pg_ny];
+	pg_mapbuf[5] = (pg_gx[pg_start_cx] + pg_gx[pg_start_cx + 1]) / 2;
+	pg_mapbuf[6] = (pg_gy[pg_start_cy] + pg_gy[pg_start_cy + 1]) / 2;
+	pg_mapbuf[7] = pg_have_portal ? 1 : 0;
+	pg_mapbuf[8] = pg_portal_x;
+	pg_mapbuf[9] = pg_portal_y;
+
+	n = 10;
+	for (cy = 0; cy < pg_ny; cy++)
+		for (cx = 0; cx < pg_nx; cx++)
+		{
+			if (!pg_cellopen[cx][cy])
+				continue;
+			if (n + 4 > cap)
+				goto done;
+			pg_mapbuf[n++] = pg_gx[cx];
+			pg_mapbuf[n++] = pg_gy[cy];
+			pg_mapbuf[n++] = pg_gx[cx + 1];
+			pg_mapbuf[n++] = pg_gy[cy + 1];
+		}
+done:
+	pg_mapbuf[0] = n;
+	return pg_mapbuf;
 }

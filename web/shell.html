@@ -218,6 +218,22 @@
     z-index: 1;
   }
   #stage.ascii #ascii-overlay { display: block; }
+  /* Live BSP minimap, drawn from the procgen cell grid + player telemetry. */
+  #minimap {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 150px;
+    height: 150px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    display: none;
+    z-index: 3;
+    pointer-events: none;
+  }
+  #stage.minimap #minimap { display: block; }
   #status {
     display: inline-flex;
     align-items: center;
@@ -273,6 +289,7 @@
   .panel-title.t-filters { color: #f0863e; }
   .panel-title.t-fx { color: #b692f6; }
   .panel-title.t-display { color: var(--fg); }
+  .panel-title.t-dungeon { color: #7dd3fc; }
   .panel-icon { width: 16px; height: 16px; color: var(--fg-faint); flex: none; }
   .panel-grid {
     display: grid;
@@ -367,6 +384,42 @@
   }
   @keyframes rec-pulse { 0%,50% { opacity: 1; } 51%,100% { opacity: 0.55; } }
   #filters, #fx, #capture { display: contents; }
+  /* Procedural-dungeon action bar: a full-width row under the toolbar. */
+  #dungeon-bar { gap: 12px; }
+  #dungeon-bar .db-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  #dungeon-bar .db-seed {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #7dd3fc;
+    background: rgba(125, 211, 252, 0.10);
+    border: 1px solid rgba(125, 211, 252, 0.25);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+  #dungeon-bar .db-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  #dungeon-bar .db-actions .qbtn { width: auto; }
+  #dungeon-bar .db-actions .qtoggle { width: auto; padding: 0 12px; }
+  #dungeon-bar .qbtn.db-new {
+    color: #7dd3fc;
+    border-color: rgba(125, 211, 252, 0.35);
+  }
+  #dungeon-bar .qbtn.db-new:hover:not(:disabled) {
+    background: rgba(125, 211, 252, 0.08);
+    border-color: rgba(125, 211, 252, 0.6);
+  }
+  #dungeon-bar .qtoggle.db-map.active { border-color: rgba(125, 211, 252, 0.55); color: #bfe8ff; }
+  #dungeon-bar .qtoggle.db-map.active .qtoggle-switch { background: #7dd3fc; border-color: #7dd3fc; }
+  #dungeon-bar .qtoggle.db-map.active .qtoggle-knob { background: #06212e; transform: translateX(14px); }
   /* Resolution readout in the Display card. */
   .res { display: flex; flex-direction: column; gap: 8px; }
   .res-row { display: flex; align-items: baseline; justify-content: space-between; }
@@ -690,6 +743,7 @@
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
       <div id="crt-overlay"></div>
       <canvas id="ascii-overlay"></canvas>
+      <canvas id="minimap" aria-hidden="true"></canvas>
       <div id="touch" aria-hidden="true">
         <div class="dpad">
           <div class="tc d-up" data-key="128">&#9650;</div>
@@ -769,6 +823,20 @@
         </div>
         <div class="res-bar"><span></span></div>
       </div>
+    </div>
+  </div>
+  <div id="dungeon-bar" class="panel">
+    <div class="db-head">
+      <span class="panel-title t-dungeon">&#127984; Procedural Dungeon</span>
+      <span class="db-seed" id="db-seed" hidden></span>
+    </div>
+    <div class="db-actions">
+      <button class="qbtn db-new" id="newdungeon-btn" type="button" disabled title="Generate and drop into a fresh procedural dungeon">&#127922; New Dungeon</button>
+      <button class="qbtn" id="dungeonlink-btn" type="button" disabled title="Copy a shareable challenge link for this exact dungeon">&#128279; Copy Challenge Link</button>
+      <button class="qtoggle db-map active" id="minimap-btn" type="button" role="switch" aria-checked="true" title="Toggle the live BSP minimap">
+        <span class="qtoggle-label">&#128506;&#65039; Minimap</span>
+        <span class="qtoggle-switch" aria-hidden="true"><span class="qtoggle-knob"></span></span>
+      </button>
     </div>
   </div>
   <div id="capture-toast"></div>
@@ -1788,6 +1856,175 @@
       }
       stage.addEventListener('touchend', endLook, { passive: true });
       stage.addEventListener('touchcancel', endLook, { passive: true });
+    })();
+
+    // --- Live BSP minimap + seeded procedural-dungeon controls ---
+    (function () {
+      var mini = document.getElementById('minimap');
+      var mctx = mini && mini.getContext ? mini.getContext('2d') : null;
+      var newBtn  = document.getElementById('newdungeon-btn');
+      var linkBtn = document.getElementById('dungeonlink-btn');
+      var mapBtn  = document.getElementById('minimap-btn');
+      var seedTag = document.getElementById('db-seed');
+      if (!mini || !mctx || !newBtn || !linkBtn || !mapBtn) return;
+
+      var DPR = Math.min(2, window.devicePixelRatio || 1);
+      var CSS = 150;
+      mini.width = Math.round(CSS * DPR);
+      mini.height = Math.round(CSS * DPR);
+
+      var miniEnabled = true;
+      var mapCache = null, mapSeed = -1;
+
+      // Pull the dungeon layout (open-cell rects + markers) straight from the
+      // engine's procgen buffer -- the same cell grid the BSP was built from.
+      // Cached per seed; geometry only changes when a new dungeon is rolled.
+      function fetchMap() {
+        var ptr = call('Web_ProcgenMap', 'number', [], []);
+        if (!ptr || !Module.HEAP32) return null;
+        var b = ptr >> 2, H = Module.HEAP32;
+        var n = H[b];
+        if (!n || n < 10) return null;
+        var m = {
+          minx: H[b + 1], miny: H[b + 2], maxx: H[b + 3], maxy: H[b + 4],
+          spawnx: H[b + 5], spawny: H[b + 6],
+          hasPortal: H[b + 7], portalx: H[b + 8], portaly: H[b + 9],
+          rects: []
+        };
+        for (var i = 10; i + 3 < n; i += 4)
+          m.rects.push([H[b + i], H[b + i + 1], H[b + i + 2], H[b + i + 3]]);
+        return m;
+      }
+
+      function dot(x, y, color, r, pulse) {
+        mctx.beginPath();
+        mctx.arc(x, y, r, 0, 6.2832);
+        mctx.fillStyle = color;
+        mctx.fill();
+        if (pulse) {
+          var pr = r + DPR * (3 + 2 * (0.5 + 0.5 * Math.sin(performance.now() / 260)));
+          mctx.beginPath();
+          mctx.arc(x, y, pr, 0, 6.2832);
+          mctx.strokeStyle = color;
+          mctx.globalAlpha = 0.55;
+          mctx.lineWidth = DPR;
+          mctx.stroke();
+          mctx.globalAlpha = 1;
+        }
+      }
+
+      function drawPlayer(x, y, yawRad) {
+        // Canvas Y is flipped vs. world Y, so negate the Y component.
+        var ang = Math.atan2(-Math.sin(yawRad), Math.cos(yawRad));
+        var s = 5 * DPR;
+        mctx.save();
+        mctx.translate(x, y);
+        mctx.rotate(ang);
+        mctx.beginPath();
+        mctx.moveTo(s, 0);
+        mctx.lineTo(-s * 0.7, s * 0.7);
+        mctx.lineTo(-s * 0.7, -s * 0.7);
+        mctx.closePath();
+        mctx.fillStyle = '#f2555a';
+        mctx.fill();
+        mctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        mctx.lineWidth = DPR * 0.6;
+        mctx.stroke();
+        mctx.restore();
+      }
+
+      function render() {
+        requestAnimationFrame(render);
+        var show = miniEnabled && isProcgen();
+        stage.classList.toggle('minimap', !!show);
+        if (!show) { if (seedTag) seedTag.hidden = true; return; }
+
+        var seed = procgenSeed();
+        if (!mapCache || mapSeed !== seed) { mapCache = fetchMap(); mapSeed = seed; }
+        var m = mapCache;
+        if (!m) return;
+
+        var W = mini.width, Hh = mini.height, pad = 10 * DPR;
+        var bw = m.maxx - m.minx, bh = m.maxy - m.miny;
+        if (bw <= 0 || bh <= 0) return;
+        var s = Math.min((W - 2 * pad) / bw, (Hh - 2 * pad) / bh);
+        var ox = (W - bw * s) / 2, oy = (Hh - bh * s) / 2;
+        function tx(wx) { return ox + (wx - m.minx) * s; }
+        function ty(wy) { return Hh - (oy + (wy - m.miny) * s); }
+
+        mctx.clearRect(0, 0, W, Hh);
+
+        mctx.fillStyle = 'rgba(125, 211, 252, 0.15)';
+        mctx.strokeStyle = 'rgba(125, 211, 252, 0.45)';
+        mctx.lineWidth = Math.max(1, DPR * 0.6);
+        for (var i = 0; i < m.rects.length; i++) {
+          var r = m.rects[i];
+          var x0 = tx(r[0]), x1 = tx(r[2]), y0 = ty(r[1]), y1 = ty(r[3]);
+          var rx = Math.min(x0, x1), ry = Math.min(y0, y1);
+          mctx.fillRect(rx, ry, Math.abs(x1 - x0), Math.abs(y1 - y0));
+          mctx.strokeRect(rx, ry, Math.abs(x1 - x0), Math.abs(y1 - y0));
+        }
+
+        dot(tx(m.spawnx), ty(m.spawny), '#7ee787', 2.6 * DPR, false);
+        if (m.hasPortal) dot(tx(m.portalx), ty(m.portaly), '#b692f6', 3 * DPR, true);
+
+        var px = call('Web_PlayerX', 'number', [], []);
+        var py = call('Web_PlayerY', 'number', [], []);
+        var yaw = call('Web_PlayerYaw', 'number', [], []) || 0;
+        if (px !== null && py !== null) drawPlayer(tx(px), ty(py), yaw * Math.PI / 180);
+
+        if (seedTag) { seedTag.hidden = false; seedTag.textContent = 'seed ' + (seed >>> 0); }
+      }
+      requestAnimationFrame(render);
+
+      function setMini(on) {
+        miniEnabled = !!on;
+        mapBtn.classList.toggle('active', miniEnabled);
+        mapBtn.setAttribute('aria-checked', miniEnabled ? 'true' : 'false');
+      }
+      mapBtn.addEventListener('click', function () { setMini(!miniEnabled); });
+
+      function copyText(text, okMsg) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { qToast(okMsg); },
+            function () { qToast(text); });
+        } else { qToast(text); }
+      }
+
+      newBtn.addEventListener('click', function () {
+        if (!ready) return;
+        var seed = (Math.random() * 0x7fffffff) >>> 0;
+        cmd('procgen ' + seed);
+        qToast('Rolling a new dungeon \u2026');
+        setTimeout(function () { try { canvas.focus(); } catch (e) {} }, 80);
+      });
+
+      linkBtn.addEventListener('click', function () {
+        if (!ready || !isProcgen()) { qToast('Enter a dungeon first'); return; }
+        var seed = procgenSeed() >>> 0;
+        copyText(location.origin + location.pathname + '#seed=' + seed,
+                 'Challenge link copied \u2713');
+      });
+
+      // Challenge links: #seed=N drops the player straight into that dungeon.
+      function seedFromHash() {
+        var mm = /(?:^|[#&])seed=(\d+)/.exec(location.hash || '');
+        return mm ? (parseInt(mm[1], 10) >>> 0) : 0;
+      }
+
+      var prevInit = Module.onRuntimeInitialized;
+      Module.onRuntimeInitialized = function () {
+        if (prevInit) prevInit();
+        newBtn.disabled = false;
+        linkBtn.disabled = false;
+        var s = seedFromHash();
+        if (s) setTimeout(function () {
+          cmd('procgen ' + s);
+          qToast('Loading challenge \u2014 seed ' + s);
+          setTimeout(function () { try { canvas.focus(); } catch (e) {} }, 120);
+        }, 500);
+      };
     })();
   })();
 </script>

@@ -361,3 +361,24 @@ int Web_IsPlaying (void)
 {
 	return (cls.state == ca_connected && cls.signon == SIGNONS && !cls.demoplayback) ? 1 : 0;
 }
+
+// --- live player telemetry for the minimap overlay (world units) -----------
+// Drawn from the interpolated view entity so the minimap tracks the smooth
+// on-screen position rather than the last server snapshot.
+EMSCRIPTEN_KEEPALIVE
+double Web_PlayerX (void)
+{
+	return cl_entities[cl.viewentity].origin[0];
+}
+
+EMSCRIPTEN_KEEPALIVE
+double Web_PlayerY (void)
+{
+	return cl_entities[cl.viewentity].origin[1];
+}
+
+EMSCRIPTEN_KEEPALIVE
+double Web_PlayerYaw (void)
+{
+	return cl.viewangles[YAW];
+}
