@@ -2206,6 +2206,7 @@
 
       var miniEnabled = true;
       var mapCache = null, mapSeed = -1;
+      var lastProcgen = false;
 
       // Pull the dungeon layout (open-cell rects + markers) straight from the
       // engine's procgen buffer -- the same cell grid the BSP was built from.
@@ -2269,7 +2270,7 @@
         var proc = isProcgen();
         var show = miniEnabled && proc;
         stage.classList.toggle('minimap', !!show);
-        if (dlmapBtn) dlmapBtn.hidden = !proc;
+        if (dlmapBtn && proc !== lastProcgen) { dlmapBtn.hidden = !proc; lastProcgen = proc; }
         if (!show) { if (seedTag) seedTag.hidden = true; return; }
 
         var seed = procgenSeed();
