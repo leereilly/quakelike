@@ -213,6 +213,11 @@ How it works:
   always rebuilds the same dungeon. The original seed is kept in `pg_last_seed`
   and exposed to the web UI via `Web_ProcgenSeed` (it rides along in the
   death-share prompt). `Web_ProcgenMap` returns a minimap buffer via `HEAP32`.
+- **Download Map**: while inside a procgen dungeon, the **Download Map** button
+  in the dungeon panel reads `id1/maps/procgen.bsp` from Emscripten's virtual
+  filesystem and saves it as `quakelike-<seed>.bsp`. Drop the file into a Quake
+  installation's `id1/maps/` directory and run `map quakelike-<seed>` from the
+  console to explore it offline.
 
 ## Notes / limitations
 

@@ -73,7 +73,7 @@ LDFLAGS=(
 	-sFORCE_FILESYSTEM=1
 	-sEXIT_RUNTIME=0
 	-sEXPORTED_FUNCTIONS=_main,_Web_SetFilter,_Web_AsciiEnable,_Web_GetAscii,_Web_AsciiCols,_Web_AsciiRows,_Web_KeyEvent,_Web_LookDelta,_Web_Command,_Web_LevelTime,_Web_Intermission,_Web_MapName,_Web_IsPlaying,_Web_Health,_Web_Kills,_Web_IsProcgen,_Web_ProcgenSeed,_Web_ProcgenMap,_Web_PlayerX,_Web_PlayerY,_Web_PlayerYaw
-	-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8,HEAP32,UTF8ToString
+	-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8,HEAP32,UTF8ToString,FS
 	-Wl,--allow-multiple-definition
 	-lidbfs.js
 	--shell-file "$SCRIPT_DIR/shell.html"
