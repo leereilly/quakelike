@@ -188,6 +188,32 @@ To enable it:
 
 The site is published at `https://<owner>.github.io/<repo>/`.
 
+## Procedural dungeons
+
+Levels can be generated on the fly by `web/procgen.c`. Type **`procgen`** in the
+console to roll a fresh dungeon (`procgen <seed>` to reproduce a specific one), or
+clear the current level and step through the **slipgate** that opens to warp into
+the next one.
+
+How it works:
+
+- **Maze layout** (`PG_Layout`): an interleaved grid of room and wall cells is
+  laid down (each room gets a randomized, 32-aligned footprint), then a seeded
+  random walk starts in the center and carves the wall cell between each pair of
+  rooms it steps across into a connecting passage. Everything it never visits
+  stays solid rock. Grids run 6–9 rooms per axis (`PG_ROOMS_MIN`/`MAX`).
+- **Real BSP, not a tilemap**: the open floor plan is compiled into a genuine
+  **binary space partitioning** tree (`PG_RenderTree` / `PG_BuildDungeon`),
+  emitting actual planes, nodes, faces, and clipnodes that the original 1996
+  engine loads exactly like a hand-built `maps/procgen.bsp`.
+- **Gameplay furniture**: a turbulent **slipgate** portal, key-locked
+  `func_door` brush submodels (silver/gold keys placed in spawn-reachable
+  rooms), monsters, and items are populated before the map is written.
+- **Deterministic & shareable**: an LCG seeds the whole process, so a given seed
+  always rebuilds the same dungeon. The original seed is kept in `pg_last_seed`
+  and exposed to the web UI via `Web_ProcgenSeed` (it rides along in the
+  death-share prompt). `Web_ProcgenMap` returns a minimap buffer via `HEAP32`.
+
 ## Notes / limitations
 
 - Software renderer only, fixed 320×200 internal resolution, scaled up by the
