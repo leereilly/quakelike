@@ -2,9 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-K6GL40J18G"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-K6GL40J18G');
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>Quake on the Web: 30th Anniversary (WebAssembly)</title>
+<title>Quakelike</title>
 <meta name="description" content="Play Quake (1996) in your browser. id Software's classic shooter recompiled to WebAssembly, no install. Live palette filters, CRT/ASCII FX, and one-click GIF capture. Celebrating 30 years.">
 <link rel="canonical" href="https://leereilly.net/quakelike/">
 
@@ -2104,11 +2113,13 @@
         html += ' Brag about it!';
         textEl.innerHTML = html;
 
-        var runLine = 'I fragged ' + k + ' ' + baddies + ' and survived ' + fmtDuration(secs) +
-                      ' in browser Quake' +
-                      (proc ? ' (procgen dungeon, seed ' + seed + ')' : '') +
-                      '! The 1996 classic, 30 years on. #Quake30';
-        lastRun = { title: 'Quake on the Web', text: runLine, url: location.href };
+        var level = proc
+          ? 'a procedurally generated Quake level (seed ' + seed + ')'
+          : 'a classic Quake level';
+        var runLine = 'I fragged ' + k + ' ' + baddies + ' and survived ' + Math.round(secs) +
+                      ' seconds in ' + level +
+                      '. Thirty years later, Quake still slaps. #Quake30';
+        lastRun = { title: 'Quakelike', text: runLine, url: 'https://leereilly.net/quakelike/' };
         box.classList.add('show');
       }
       function hidePrompt() { box.classList.remove('show'); }
